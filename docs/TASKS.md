@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 4 complete. Phase 5 is next.
+Status: Phase 5 complete. Phase 6 is next.
 
 ## Phase 1 — Foundation
 
@@ -79,18 +79,26 @@ Acceptance:
 
 ## Phase 5 — HTTP API
 
-- [ ] State endpoint for current player and lyrics.
-- [ ] Player selection endpoint.
-- [ ] Playback control endpoint.
-- [ ] Library list, item, save, create, delete, and original endpoints.
-- [ ] Call synchronous library I/O through `spawn_blocking` so Axum worker threads stay free.
-- [ ] Run lookups in a background task and apply results only when the media generation is unchanged. A player switch can change the generation without a `track_changed` update, so key the lookup on generation.
-- [ ] Add a short failure cooldown so an outage does not cause a request on every poll.
-- [ ] Lyrics lookup endpoint for the current and selected track.
-- [ ] Offset endpoint.
-- [ ] Stable error codes for the frontend.
-- [ ] Host/Origin validation, JSON content type, body limits, no-store.
-- [ ] API tests with fake services.
+- [x] State endpoint for current player and lyrics.
+- [x] Player selection endpoint.
+- [x] Playback control endpoint.
+- [x] Library list, item, save, create, delete, and original endpoints.
+- [x] Call synchronous library I/O through `spawn_blocking` so Axum worker threads stay free.
+- [x] Run lookups in a background task and apply results only when the media generation is unchanged. A player switch can change the generation without a `track_changed` update, so key the lookup on generation.
+- [x] Add a short failure cooldown so an outage does not cause a request on every poll.
+- [x] Lyrics lookup endpoint for the current and selected track.
+- [x] Offset endpoint.
+- [x] Stable error codes for the frontend.
+- [x] Host/Origin validation, JSON content type, body limits, no-store.
+- [x] API tests with fake media and lyrics services.
+
+Acceptance:
+
+- [x] `GET /api/now` returns track, players, and lyrics state.
+- [x] Background lookup saves found lyrics and survives a track change without applying stale results.
+- [x] Library create/read/save/delete/original and offset round-trip through the API.
+- [x] Foreign Host/Origin, wrong content type, and invalid JSON return stable JSON error codes.
+- [x] The real server starts with no media player and serves the state and library endpoints.
 
 ## Phase 6 — Player UI
 

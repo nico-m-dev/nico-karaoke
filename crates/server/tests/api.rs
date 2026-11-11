@@ -4,26 +4,41 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use nico_karaoke_core::{AppConfig, LaunchMode};
+use nico_karaoke_core::{AppConfig, FakeMediaProvider, LaunchMode, Library, LyricsLookup};
+use nico_karaoke_server::lrclib_http::HttpLyricsClient;
+use nico_karaoke_server::watcher::Watcher;
 use nico_karaoke_server::{AppState, app};
 use serde_json::Value;
 use tower::ServiceExt;
 
-fn test_state() -> AppState {
-    AppState {
-        config: Arc::new(AppConfig {
-            host: std::net::Ipv4Addr::LOCALHOST.into(),
-            port: 8770,
-            data_dir: PathBuf::from("test-data"),
-            launch: LaunchMode::NoOpen,
-        }),
-        web_dir: Arc::new(PathBuf::from("web/dist")),
-    }
+fn test_state() -> (AppState, tempfile::TempDir) {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let lookup = Arc::new(LyricsLookup::new(Arc::new(
+        HttpLyricsClient::new().expect("HTTP client builds"),
+    )));
+    let provider = Arc::new(FakeMediaProvider::default());
+    let watcher = Arc::new(Watcher::new(provider, lookup, library));
+
+    (
+        AppState {
+            config: Arc::new(AppConfig {
+                host: std::net::Ipv4Addr::LOCALHOST.into(),
+                port: 8770,
+                data_dir: PathBuf::from("test-data"),
+                launch: LaunchMode::NoOpen,
+            }),
+            web_dir: Arc::new(PathBuf::from("web/dist")),
+            watcher,
+        },
+        temp,
+    )
 }
 
 #[tokio::test]
 async fn health_returns_ok_json() {
-    let response = app(test_state())
+    let (state, _temp) = test_state();
+    let response = app(state)
         .oneshot(
             Request::builder()
                 .uri("/api/health")
@@ -51,7 +66,8 @@ async fn health_returns_ok_json() {
 
 #[tokio::test]
 async fn unknown_api_route_returns_json_404() {
-    let response = app(test_state())
+    let (state, _temp) = test_state();
+    let response = app(state)
         .oneshot(
             Request::builder()
                 .uri("/api/does-not-exist")
@@ -75,7 +91,8 @@ async fn unknown_api_route_returns_json_404() {
 
 #[tokio::test]
 async fn bare_api_route_returns_json_404() {
-    let response = app(test_state())
+    let (state, _temp) = test_state();
+    let response = app(state)
         .oneshot(
             Request::builder()
                 .uri("/api")
@@ -101,7 +118,8 @@ async fn bare_api_route_returns_json_404() {
 async fn missing_static_file_returns_404() {
     // The app is multi-page: the Studio will be a real server route, not a client-side
     // catch-all. Unknown static paths should therefore not fall back to index.html.
-    let response = app(test_state())
+    let (state, _temp) = test_state();
+    let response = app(state)
         .oneshot(
             Request::builder()
                 .uri("/missing.js")

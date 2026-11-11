@@ -2,11 +2,15 @@ use std::env;
 use std::io::ErrorKind;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use nico_karaoke_core::{
-    APP_NAME, APP_VERSION, AppConfig, ConfigError, LOG_FILE_NAME, LaunchMode, USAGE,
+    APP_NAME, APP_VERSION, AppConfig, ConfigError, LOG_FILE_NAME, LaunchMode, Library,
+    LyricsLookup, USAGE,
 };
+use nico_karaoke_server::lrclib_http::HttpLyricsClient;
+use nico_karaoke_server::watcher::Watcher;
 use nico_karaoke_server::{AppState, app};
 use tokio::net::TcpListener;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -44,7 +48,6 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| PathBuf::from("web/dist"));
     if !web_dir.join("index.html").is_file() {
         tracing::warn!(
-            path = %web_dir.display(),
             "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
         );
     }
@@ -64,9 +67,23 @@ async fn main() -> Result<()> {
         }
     }
 
+    let library =
+        Arc::new(Library::open(config.library_dir()).context("failed to open the lyrics library")?);
+    for warning in library.warnings() {
+        tracing::warn!(warning = %warning, "library warning");
+    }
+
+    let lyrics_client =
+        Arc::new(HttpLyricsClient::new().context("failed to create the LRCLIB client")?);
+    let lookup = Arc::new(LyricsLookup::new(lyrics_client));
+    let provider = nico_karaoke_platform::create_provider().await;
+    let watcher = Arc::new(Watcher::new(provider, lookup, library));
+    watcher.start();
+
     let state = AppState {
         config: config.into(),
         web_dir: web_dir.into(),
+        watcher,
     };
     axum::serve(listener, app(state))
         .await

@@ -9,10 +9,9 @@ does not record audio, download tracks, or play video.
 
 ## Status
 
-Foundation phase. The workspace, local server, typed frontend, and CI skeleton exist; media,
-lyrics, library, and Studio behaviour are next. Host/Origin validation and the full local-only
-HTTP policy are scheduled for the API phase; the server currently binds to `127.0.0.1` by
-default.
+Development phase. The workspace, local server, typed frontend, media providers, lyrics
+lookup, library, watcher, and local API are implemented; the player, library, and Studio UI
+come next. The server binds to `127.0.0.1` by default and validates `Host`/`Origin`.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
 
@@ -100,6 +99,30 @@ With a player active, the developer probe prints what the backend sees:
 ```bash
 cargo run -p nico-karaoke-platform --example media_probe
 ```
+
+## Local API
+
+The local HTTP API returns JSON and never caches responses. It is only reachable from this
+machine and rejects foreign `Host`/`Origin` headers.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | server and platform status |
+| `GET` | `/api/now` | current track, players, and lyrics state |
+| `POST` | `/api/player` | choose the followed player |
+| `POST` | `/api/control` | play, pause, or seek |
+| `GET` | `/api/library` | library summaries |
+| `POST` | `/api/library` | create a library item |
+| `GET` | `/api/library/{key}` | full library item |
+| `PUT` | `/api/library/{key}` | save edited text |
+| `DELETE` | `/api/library/{key}` | delete an item |
+| `POST` | `/api/library/{key}/original` | restore the saved original |
+| `POST` | `/api/lyrics` | save text for the current track |
+| `POST` | `/api/lyrics/offset` | update the current offset |
+| `POST` | `/api/lyrics/fetch` | look up lyrics without saving |
+
+Errors use stable codes such as `forbidden_host`, `no_current_track`, `track_changed`,
+`lyrics_not_found`, `invalid_json`, and `unsupported_media_type`.
 
 ## Checks
 
