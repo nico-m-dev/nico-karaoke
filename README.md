@@ -90,6 +90,17 @@ first. The lookup tries an exact match with the album, then without it, then sea
 five seconds of the known duration. A synchronised result wins over plain text, and a miss is
 cached for one hour. A temporary network failure is not cached as a miss.
 
+## Media providers
+
+Linux follows players through MPRIS on the session bus. Windows follows sessions through
+SMTC. Both expose the same provider trait and never capture audio.
+
+With a player active, the developer probe prints what the backend sees:
+
+```bash
+cargo run -p nico-karaoke-platform --example media_probe
+```
+
 ## Checks
 
 ```bash

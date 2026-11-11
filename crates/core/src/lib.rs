@@ -8,6 +8,7 @@ pub mod config;
 pub mod library;
 pub mod lrclib;
 pub mod lyrics;
+pub mod media;
 pub mod title;
 
 pub use config::{APP_NAME, APP_VERSION, AppConfig, ConfigError, DEFAULT_PORT, LaunchMode, USAGE};
@@ -21,5 +22,9 @@ pub use lrclib::{
 };
 pub use lyrics::{
     LrcDocument, LyricLine, format_timestamp, is_music_marker, parse_lrc, parse_timestamp, to_lrc,
+};
+pub use media::{
+    FakeMediaProvider, MediaError, MediaProvider, MediaState, MediaTracker, MediaUpdate,
+    PlaybackAction, PlaybackControl, PlayerInfo, PlayerSnapshot,
 };
 pub use title::{clean, normalize, record_key, slugify, split_title, strip_channel};

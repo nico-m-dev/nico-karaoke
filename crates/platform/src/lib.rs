@@ -1,8 +1,17 @@
 //! Platform boundary for Nico Karaoke.
 //!
-//! Linux MPRIS and Windows SMTC implementations will live here behind a shared provider
-//! trait. The foundation only exposes target information so the server can report what it is
-//! running on without pulling platform APIs into the domain crate.
+//! The core crate knows only the `MediaProvider` trait. This crate supplies the Linux MPRIS
+//! provider and the Windows SMTC provider behind that trait.
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use nico_karaoke_core::{MediaError, MediaProvider, PlaybackAction, PlayerSnapshot};
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub const SUPPORTED_OPERATING_SYSTEMS: [&str; 2] = ["linux", "windows"];
 
@@ -22,6 +31,53 @@ pub fn target_label() -> String {
     format!("{}/{}", operating_system(), architecture())
 }
 
+/// Build the media provider for this platform. A backend that cannot start is replaced by a
+/// provider that reports the reason instead of taking the app down.
+pub async fn create_provider() -> Arc<dyn MediaProvider> {
+    #[cfg(target_os = "linux")]
+    {
+        match linux::LinuxMediaProvider::new().await {
+            Ok(provider) => Arc::new(provider),
+            Err(error) => Arc::new(UnavailableMediaProvider::new(error.to_string())),
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Arc::new(windows::SmtcMediaProvider::new())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        Arc::new(UnavailableMediaProvider::new(format!(
+            "media providers are not implemented for {}",
+            operating_system()
+        )))
+    }
+}
+
+/// Fallback provider used when the platform backend is unavailable.
+pub struct UnavailableMediaProvider {
+    reason: String,
+}
+
+impl UnavailableMediaProvider {
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl MediaProvider for UnavailableMediaProvider {
+    async fn snapshots(&self) -> Result<Vec<PlayerSnapshot>, MediaError> {
+        Err(MediaError::Unavailable(self.reason.clone()))
+    }
+
+    async fn control(&self, _player: &str, _action: PlaybackAction) -> Result<(), MediaError> {
+        Err(MediaError::Unavailable(self.reason.clone()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -38,5 +94,15 @@ mod tests {
         for target in SUPPORTED_OPERATING_SYSTEMS {
             assert!(matches!(target, "linux" | "windows"));
         }
+    }
+
+    #[tokio::test]
+    async fn unavailable_provider_reports_its_reason() {
+        let provider = UnavailableMediaProvider::new("no backend");
+        let error = provider
+            .snapshots()
+            .await
+            .expect_err("provider is unavailable");
+        assert!(matches!(error, MediaError::Unavailable(reason) if reason == "no backend"));
     }
 }

@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 3 complete. Phase 4 is next.
+Status: Phase 4 complete. Phase 5 is next.
 
 ## Phase 1 — Foundation
 
@@ -68,15 +68,14 @@ Acceptance:
 
 ## Phase 4 — Media providers
 
-- [ ] `MediaProvider` trait, snapshot types, and a fake provider.
-- [ ] Linux MPRIS provider.
-- [ ] Windows SMTC provider behind conditional compilation.
-- [ ] Player selection, fallback selection, and session identity.
-- [ ] Play/pause, relative seek, absolute seek, and unsupported-action errors.
-- [ ] Position polling and UI interpolation contract.
-- [ ] Discard late lookup results when the track changed while the lookup was running.
-- [ ] Add a short failure cooldown so an outage does not cause a request on every poll.
-- [ ] Provider tests with fakes; real-player checks documented separately.
+- [x] `MediaProvider` trait, snapshot types, and a fake provider.
+- [x] Linux MPRIS provider via zbus; helper tests and a manual probe example.
+- [x] Windows SMTC provider behind conditional compilation; cross-checked with a Windows target.
+- [x] Player selection, fallback selection, and session identity.
+- [x] Play/pause, relative seek, absolute seek, and unsupported-action errors.
+- [x] Position polling and UI interpolation contract.
+- [x] Track generation primitive for the stale-result guard; applying it lands with the watcher.
+- [x] Provider tests with fakes; real-player checks use `examples/media_probe.rs`.
 
 ## Phase 5 — HTTP API
 
@@ -85,6 +84,8 @@ Acceptance:
 - [ ] Playback control endpoint.
 - [ ] Library list, item, save, create, delete, and original endpoints.
 - [ ] Call synchronous library I/O through `spawn_blocking` so Axum worker threads stay free.
+- [ ] Run lookups in a background task and apply results only when the media generation is unchanged.
+- [ ] Add a short failure cooldown so an outage does not cause a request on every poll.
 - [ ] Lyrics lookup endpoint for the current and selected track.
 - [ ] Offset endpoint.
 - [ ] Stable error codes for the frontend.

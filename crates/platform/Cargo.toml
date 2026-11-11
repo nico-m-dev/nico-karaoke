@@ -6,3 +6,15 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+nico-karaoke-core = { path = "../core" }
+tokio.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
