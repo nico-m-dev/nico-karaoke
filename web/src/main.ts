@@ -17,14 +17,8 @@ import {
   type PlayerInfo,
   type Track,
 } from "./api";
-import {
-  applyTranslations,
-  detectLanguage,
-  rememberLanguage,
-  t,
-  type Language,
-  type MessageKey,
-} from "./i18n";
+import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
+import { errorMessage, sourceLabelKey } from "./messages";
 import {
   fillProgress,
   findActiveLine,
@@ -190,29 +184,6 @@ let selectedKey: string | null = null;
 let detailItem: LibraryItemResponse | null = null;
 let detailEditing = false;
 let detailBusy = false;
-
-const ERROR_KEYS: Record<string, MessageKey> = {
-  forbidden_host: "player.error.generic",
-  invalid_json: "player.error.request_failed",
-  unsupported_media_type: "player.error.request_failed",
-  payload_too_large: "player.error.request_failed",
-  no_current_track: "player.error.no_current_track",
-  player_not_found: "player.error.player_not_found",
-  lyrics_pending: "player.error.lyrics_pending",
-  lyrics_unavailable: "player.error.lyrics_unavailable",
-  lyrics_not_found: "player.error.lyrics_not_found",
-  not_supported: "player.error.not_supported",
-  player_error: "player.error.player_error",
-  track_changed: "player.error.track_changed",
-  media_unavailable: "player.error.media_unavailable",
-  invalid_value: "player.error.invalid_value",
-  lyrics_too_long: "player.error.lyrics_too_long",
-  library_error: "player.error.library_error",
-  lyrics_empty: "player.error.lyrics_empty",
-  no_original: "player.error.no_original",
-  invalid_key: "player.error.invalid_key",
-  request_failed: "player.error.request_failed",
-};
 
 function trackKey(track: Track | null): string {
   return track ? `${track.player}|${track.title}|${track.artist}` : "";
@@ -612,7 +583,7 @@ async function onPlay(): Promise<void> {
     await togglePlayback();
     await poll();
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(language, error));
   } finally {
     controlBusy = false;
     updatePlayButton(data.track);
@@ -633,7 +604,7 @@ async function onPlayerChange(): Promise<void> {
     await choosePlayer(player);
     await poll();
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(language, error));
   } finally {
     selectionBusy = false;
     els.players.disabled = false;
@@ -660,25 +631,6 @@ function showToast(message: string): void {
     els.toast.classList.remove("show");
     els.toast.textContent = "";
   }, 4200);
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    const key = ERROR_KEYS[error.code];
-    if (key) {
-      return t(language, key);
-    }
-  }
-  return t(language, "player.error.generic");
-}
-
-function sourceLabel(source: string): string {
-  const keys: Record<string, MessageKey> = {
-    lrclib: "library.source.lrclib",
-    manual: "library.source.manual",
-    tap: "library.source.tap",
-  };
-  return t(language, keys[source] ?? "library.source.unknown");
 }
 
 async function openLibrary(): Promise<void> {
@@ -752,10 +704,10 @@ async function loadLibrary(): Promise<void> {
       renderLibrary(libraryData);
     }
   } catch (error) {
-    els.libraryCount.textContent = errorMessage(error);
+    els.libraryCount.textContent = errorMessage(language, error);
     const hint = document.createElement("p");
     hint.className = "hint library-empty";
-    hint.textContent = errorMessage(error);
+    hint.textContent = errorMessage(language, error);
     els.libraryList.replaceChildren(hint);
   }
 }
@@ -810,7 +762,7 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   const meta = document.createElement("span");
   meta.className = "library-item-meta";
   const parts = [
-    sourceLabel(item.source),
+    t(language, sourceLabelKey(item.source)),
     item.synced ? t(language, "library.synced") : t(language, "library.plain"),
     t(language, "library.lines", { count: item.line_count }),
     formatDate(item.updated_at),
@@ -848,7 +800,7 @@ async function openDetail(key: string): Promise<void> {
     renderDetail();
   } catch (error) {
     if (selectedKey === key) {
-      renderDetailError(errorMessage(error));
+      renderDetailError(errorMessage(language, error));
     }
   }
 }
@@ -888,7 +840,7 @@ function renderDetail(): void {
   meta.className = "detail-meta";
   meta.textContent = [
     item.current ? t(language, "player.library.current") : "",
-    sourceLabel(lyrics.source ?? "manual"),
+    t(language, sourceLabelKey(lyrics.source ?? "manual")),
     lyrics.synced ? t(language, "library.synced") : t(language, "library.plain"),
     t(language, "library.lines", { count: lyrics.lines.length }),
     lyrics.duration ? formatTime(lyrics.duration) : "",
@@ -909,7 +861,12 @@ function renderDetail(): void {
   const actions = document.createElement("div");
   actions.className = "detail-actions";
   if (!detailEditing) {
+    const studio = document.createElement("a");
+    studio.className = "ghost primary detail-link";
+    studio.href = `/editor?key=${encodeURIComponent(item.lyrics.record_key ?? selectedKey ?? "")}`;
+    studio.textContent = t(language, "player.library.studio");
     actions.append(
+      studio,
       actionButton(t(language, "player.library.edit"), () => {
         detailEditing = true;
         renderDetail();
@@ -1043,7 +1000,7 @@ async function saveDetail(): Promise<void> {
     }
     showToast(t(language, "player.library.saved"));
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(language, error));
   } finally {
     setDetailBusy(false);
   }
@@ -1074,7 +1031,7 @@ async function restoreDetail(): Promise<void> {
     }
     showToast(t(language, "player.library.restored"));
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(language, error));
   } finally {
     setDetailBusy(false);
   }
@@ -1105,7 +1062,7 @@ async function deleteDetail(): Promise<void> {
     }
     showToast(t(language, "player.library.deleted"));
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(language, error));
   } finally {
     setDetailBusy(false);
   }

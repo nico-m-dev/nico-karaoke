@@ -152,3 +152,95 @@ async fn missing_static_file_returns_404() {
         .to_bytes();
     assert!(!body.starts_with(b"<!doctype html>"));
 }
+
+#[tokio::test]
+async fn editor_route_serves_the_studio_page() {
+    let (mut state, _temp) = test_state();
+    let web = tempfile::tempdir().expect("web directory");
+    std::fs::write(
+        web.path().join("editor.html"),
+        "<!doctype html><title>studio fixture</title>",
+    )
+    .expect("editor page");
+    state.web_dir = Arc::new(web.path().to_path_buf());
+
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .uri("/editor")
+                .header("host", "127.0.0.1")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    assert!(String::from_utf8_lossy(&body).contains("studio fixture"));
+}
+
+#[tokio::test]
+async fn parse_lyrics_returns_lines_without_writing() {
+    let (state, _temp) = test_state();
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/lyrics/parse")
+                .header("host", "127.0.0.1")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"text":"[00:01.00]First [end:00:04.00]\n[00:06.00]Second\n"}"#,
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("parse body should be JSON");
+
+    assert_eq!(payload["synced"], true);
+    assert_eq!(payload["lines"][0]["t"], 1.0);
+    assert_eq!(payload["lines"][0]["end"], 4.0);
+    assert_eq!(payload["lines"][1]["text"], "Second");
+}
+
+#[tokio::test]
+async fn parse_lyrics_rejects_empty_text() {
+    let (state, _temp) = test_state();
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/lyrics/parse")
+                .header("host", "127.0.0.1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"text":"   "}"#))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error body should be JSON");
+    assert_eq!(payload["error"], "lyrics_empty");
+}

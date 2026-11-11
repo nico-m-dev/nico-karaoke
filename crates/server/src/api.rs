@@ -6,8 +6,8 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use nico_karaoke_core::{
-    APP_NAME, APP_VERSION, AppConfig, LibraryError, LyricsSource, MediaError, PlaybackControl,
-    PlayerSnapshot,
+    APP_NAME, APP_VERSION, AppConfig, LibraryError, LrcDocument, LyricsSource, MediaError,
+    PlaybackControl, PlayerSnapshot,
 };
 use nico_karaoke_platform::{is_supported, target_label};
 use serde::Deserialize;
@@ -15,7 +15,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::AppState;
-use crate::dto::{ErrorDto, LibraryDto, LibraryItemResponse, LyricsDto, NowDto, OkResponse};
+use crate::dto::{
+    ErrorDto, LibraryDto, LibraryItemResponse, LyricsDto, NowDto, OkResponse, ParsedLyricsDto,
+};
 use crate::watcher::{NewLibraryItem, WatcherError};
 
 pub const MAX_BODY: usize = 256_000;
@@ -281,6 +283,24 @@ pub async fn save_current_lyrics(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ParseLyricsRequest {
+    pub text: String,
+}
+
+/// Parse a raw LRC draft for the Studio. Nothing is written; the response is the same line
+/// shape the library returns so the editor can keep one document model.
+pub async fn parse_lyrics(
+    ApiJson(body): ApiJson<ParseLyricsRequest>,
+) -> Result<Json<ParsedLyricsDto>, ApiError> {
+    validate_text(&body.text)?;
+    let document = LrcDocument::parse(&body.text);
+    Ok(Json(ParsedLyricsDto {
+        synced: document.synced,
+        lines: document.lines,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct OffsetRequest {
     pub offset: f64,
     #[serde(default)]
@@ -318,6 +338,9 @@ pub struct FetchRequest {
     pub track_id: Option<String>,
     #[serde(default)]
     pub signature: Option<String>,
+    /// Store the found lyrics as the working text, even when the item has a manual edit.
+    #[serde(default)]
+    pub apply: bool,
 }
 
 pub async fn fetch_lyrics(
@@ -396,11 +419,18 @@ pub async fn fetch_lyrics(
         return Err(api_error(StatusCode::CONFLICT, "no_current_track"));
     }
 
-    let record = state
+    let mut record = state
         .watcher
         .fetch(&title, &artist, &album, length)
         .await
         .map_err(watcher_error)?;
+    if body.apply {
+        record = state
+            .watcher
+            .save_fetched(record)
+            .await
+            .map_err(watcher_error)?;
+    }
     let signature = if body.item_key.is_some() {
         None
     } else {

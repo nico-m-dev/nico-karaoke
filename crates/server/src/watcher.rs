@@ -422,6 +422,22 @@ impl Watcher {
         }
     }
 
+    /// Apply fetched lyrics that the user explicitly asked for. Unlike a background lookup,
+    /// this replaces a manual working text and keeps the fetched original for restore.
+    pub async fn save_fetched(
+        self: &Arc<Self>,
+        mut record: LyricRecord,
+    ) -> Result<LyricRecord, WatcherError> {
+        record.updated_at = 0.0;
+        let saved = save_record(self.library.clone(), record).await?;
+        self.bump_revision();
+        if self.is_current_key(&saved.key) {
+            let generation = self.state().media.generation;
+            self.set_lyrics(generation, LyricsView::Found(Box::new(saved.clone())));
+        }
+        Ok(saved)
+    }
+
     fn ensure_lyrics(self: &Arc<Self>) {
         let _guard = self
             .ensure_lock

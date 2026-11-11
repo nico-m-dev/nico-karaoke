@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Studio — Nico Karaoke</title>
+  </head>
+  <body class="studio-body">
+    <div id="studio" class="studio" hidden>
+      <header class="studio-header">
+        <a id="studio-back" class="ghost studio-back" href="/" data-i18n="studio.back"></a>
+        <div class="studio-heading">
+          <h1 id="studio-title" class="studio-title"></h1>
+          <p id="studio-subtitle" class="studio-subtitle"></p>
+        </div>
+        <p id="studio-save-state" class="studio-save-state" role="status" aria-live="polite"></p>
+        <div class="studio-actions">
+          <button id="studio-undo" class="ghost" type="button" data-i18n="studio.undo"></button>
+          <button
+            id="studio-save"
+            class="ghost primary"
+            type="button"
+            data-i18n="studio.save"
+          ></button>
+          <div class="languages" role="group" data-i18n-aria-label="studio.language">
+            <button type="button" data-language="nl">NL</button>
+            <button type="button" data-language="en">EN</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="studio-transport" aria-label="Playback">
+        <button
+          id="studio-play"
+          class="ghost icon"
+          type="button"
+          data-i18n-title="studio.play"
+          data-i18n-aria-label="studio.play"
+        >
+          ▶
+        </button>
+        <span id="studio-time" class="studio-clock">0:00</span>
+        <span class="studio-clock muted" aria-hidden="true">/</span>
+        <span id="studio-duration" class="studio-clock muted">0:00</span>
+        <div class="studio-actions">
+          <button id="studio-fetch" class="ghost" type="button" data-i18n="studio.fetch"></button>
+          <button
+            id="studio-restore"
+            class="ghost"
+            type="button"
+            data-i18n="studio.restore"
+          ></button>
+        </div>
+      </section>
+
+      <p id="studio-notice" class="studio-notice" role="status" hidden></p>
+
+      <main class="studio-main">
+        <section class="studio-timeline" aria-labelledby="timeline-heading">
+          <div class="timeline-toolbar">
+            <h2 id="timeline-heading" class="sr-only" data-i18n="studio.timeline"></h2>
+            <label class="timeline-zoom">
+              <span data-i18n="studio.zoom"></span>
+              <input id="timeline-zoom" type="range" min="5" max="120" step="1" />
+            </label>
+            <span id="timeline-zoom-value" class="hint"></span>
+            <button id="timeline-fit" class="ghost" type="button" data-i18n="studio.fit"></button>
+          </div>
+          <div id="timeline-scroll" class="timeline-scroll">
+            <div id="timeline-canvas" class="timeline-canvas">
+              <div id="timeline-ruler" class="timeline-ruler"></div>
+              <div id="timeline-markers" class="timeline-markers"></div>
+              <div id="timeline-playhead" class="timeline-playhead" aria-hidden="true"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="studio-columns">
+          <section class="studio-lines" aria-labelledby="lines-heading">
+            <header class="studio-section-head">
+              <h2 id="lines-heading" data-i18n="studio.lines"></h2>
+              <span id="line-count" class="hint"></span>
+              <div class="studio-actions">
+                <button
+                  id="add-line"
+                  class="ghost"
+                  type="button"
+                  data-i18n="studio.add_line"
+                ></button>
+                <button
+                  id="add-music"
+                  class="ghost"
+                  type="button"
+                  data-i18n="studio.add_music"
+                ></button>
+              </div>
+            </header>
+            <ol id="line-list" class="line-list"></ol>
+            <p id="lines-empty" class="hint" hidden data-i18n="studio.empty"></p>
+          </section>
+
+          <aside class="studio-side">
+            <section class="inspector" aria-labelledby="inspector-heading">
+              <h2 id="inspector-heading" data-i18n="studio.inspector"></h2>
+              <div id="inspector-body"></div>
+            </section>
+            <details id="raw-panel" class="raw-panel">
+              <summary data-i18n="studio.raw"></summary>
+              <textarea
+                id="raw-text"
+                spellcheck="false"
+                aria-label="Raw LRC"
+                data-i18n-aria-label="studio.raw"
+              ></textarea>
+              <div class="studio-actions">
+                <button
+                  id="raw-apply"
+                  class="ghost primary"
+                  type="button"
+                  data-i18n="studio.raw.apply"
+                ></button>
+                <button
+                  id="raw-reset"
+                  class="ghost"
+                  type="button"
+                  data-i18n="studio.raw.reset"
+                ></button>
+              </div>
+            </details>
+          </aside>
+        </div>
+      </main>
+
+      <div
+        id="tap-overlay"
+        class="tap-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tap-title"
+        hidden
+      >
+        <div class="tap-card">
+          <h2 id="tap-title" data-i18n="studio.tap.title"></h2>
+          <p id="tap-hint" class="hint" data-i18n="studio.tap.hint"></p>
+          <p id="tap-countdown" class="tap-countdown" aria-live="assertive"></p>
+          <p id="tap-line" class="tap-line"></p>
+          <p id="tap-progress" class="hint"></p>
+          <label class="tap-correction">
+            <span data-i18n="studio.tap.correction"></span>
+            <input id="tap-correction" type="number" step="0.05" value="-0.2" />
+          </label>
+          <div class="tap-actions">
+            <button
+              id="tap-start"
+              class="ghost primary"
+              type="button"
+              data-i18n="studio.tap.start"
+            ></button>
+            <button
+              id="tap-tap"
+              class="tap-button"
+              type="button"
+              hidden
+              data-i18n="studio.tap.tap"
+            ></button>
+            <button id="tap-stop" class="ghost" type="button" data-i18n="studio.tap.stop"></button>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+    <p id="studio-loading" class="studio-loading" data-i18n="studio.loading"></p>
+    <script type="module" src="/src/studio.ts"></script>
+  </body>
+</html>

@@ -10,9 +10,8 @@ does not record audio, download tracks, or play video.
 ## Status
 
 Development phase. The workspace, local server, typed frontend, media providers, lyrics
-lookup, library, watcher, local API, player UI, and library browser are implemented; the
-Studio timeline editor comes next. The server binds to `127.0.0.1` by default and validates
-`Host`/`Origin`.
+lookup, library, watcher, local API, player UI, library browser, and Studio editor are
+implemented. The server binds to `127.0.0.1` by default and validates `Host`/`Origin`.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
 
@@ -20,8 +19,8 @@ See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan
 
 - Rust stable
 - Node.js 22.12 or newer (LTS recommended)
-- On Linux, a running media player that publishes MPRIS metadata (later phases)
-- On Windows, an application that publishes SMTC metadata (later phases)
+- On Linux, a running media player that publishes MPRIS metadata
+- On Windows, an application that publishes SMTC metadata
 
 ## Run locally
 
@@ -124,8 +123,41 @@ The library opens from the player and lists every saved text. Search filters by 
 artist, or album. Each item shows its source, sync state, line count, update date, current
 badge, and whether an original is kept.
 
-Open an item to edit the raw LRC, save it, restore the saved original, delete it, or search
-for it on YouTube or Spotify. The Studio timeline editor is the next phase.
+Open an item to edit the raw LRC, open it in the Studio, restore the saved original, delete
+it, or search for it on YouTube or Spotify.
+
+## Studio
+
+The Studio is a separate page, served at `/editor`. Open it from a library item, or visit
+`/editor` to edit the current track. It loads one song at a time and never writes without an
+explicit save.
+
+- Header: title, artist, source, original availability, play/pause, position, duration, save,
+  dirty state, language, and fetch/restore actions.
+- Timeline: time ruler, one marker per line, a moving playhead, zoom from 5 to 120 px/s, fit,
+  click-to-seek, and drag-to-retime. Marker labels appear only when they fit.
+- Lines: inline time and text editing, re-sorting on a time change, add line, add `♪` music
+  marker, play a line, and delete. Undo covers structural changes and text edits.
+- Inspector: nudges, take current time, preview the line with pre-roll/post-roll, toggle a
+  music marker, delete, and tap mode.
+- Tap mode: counts down, plays from the start, assigns the current time to each line on
+  Space/Enter or a tap, applies a configurable correction (default −0.2 s), and supports
+  Backspace.
+- Raw LRC: view and replace the whole text. Parsing happens on the server so the editor and
+  player share one parser.
+- Legacy `[end:]` tags are converted to `♪` markers on open where there is a real gap; they
+  are only removed from disk when you save.
+
+| Input | Action |
+| --- | --- |
+| `Ctrl`/`Cmd` + `S` | save |
+| `Ctrl`/`Cmd` + `Z` | undo (when focus is not in a text field) |
+| `Space` | play / pause |
+| `←` / `→` | nudge the selected line by 0.1 s |
+| `Shift` + `←` / `→` | nudge by 0.5 s |
+| `Alt` + `←` / `→` | nudge by 0.01 s |
+| `Backspace` (tap mode) | undo the last tap |
+| `Esc` (tap mode) | stop tapping |
 
 ## Local API
 
@@ -145,8 +177,9 @@ machine and rejects foreign `Host`/`Origin` headers.
 | `DELETE` | `/api/library/{key}` | delete an item |
 | `POST` | `/api/library/{key}/original` | restore the saved original; send `{}` as JSON |
 | `POST` | `/api/lyrics` | save text for the current track |
+| `POST` | `/api/lyrics/parse` | parse raw LRC for the Studio without writing |
 | `POST` | `/api/lyrics/offset` | update the current offset |
-| `POST` | `/api/lyrics/fetch` | look up lyrics without saving |
+| `POST` | `/api/lyrics/fetch` | look up lyrics for the current track or a library item; `apply` stores them |
 
 Errors use stable codes such as `forbidden_host`, `no_current_track`, `track_changed`,
 `lyrics_not_found`, `invalid_json`, and `unsupported_media_type`.

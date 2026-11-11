@@ -230,6 +230,12 @@ pub struct LibraryItemResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ParsedLyricsDto {
+    pub synced: bool,
+    pub lines: Vec<LyricLine>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct OkResponse {
     pub ok: bool,
 }

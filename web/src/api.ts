@@ -96,11 +96,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(url: string, init?: RequestInit, timeoutMs = 5000): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
     ...init,
-    signal: init?.signal ?? AbortSignal.timeout(5000),
+    signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
     headers: {
       Accept: "application/json",
       ...(init?.headers ?? {}),
@@ -138,6 +138,56 @@ export function togglePlayback(): Promise<{ ok: boolean }> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "playpause" }),
+  });
+}
+
+export function setPlayback(action: "play" | "pause"): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/api/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+}
+
+export function seekTo(position: number): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/api/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "seek_to", position }),
+  });
+}
+
+export type FetchRequest = {
+  item_key?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  length?: number | null;
+  apply?: boolean;
+};
+
+export function fetchLyrics(body: FetchRequest): Promise<Lyrics> {
+  return request<Lyrics>(
+    "/api/lyrics/fetch",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    30_000,
+  );
+}
+
+export type ParsedLyrics = {
+  synced: boolean;
+  lines: LyricLine[];
+};
+
+export function parseLyrics(text: string): Promise<ParsedLyrics> {
+  return request<ParsedLyrics>("/api/lyrics/parse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
   });
 }
 

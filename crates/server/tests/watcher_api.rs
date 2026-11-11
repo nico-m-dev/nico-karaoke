@@ -365,6 +365,52 @@ async fn fetch_returns_lyrics_without_saving_them() {
 }
 
 #[tokio::test]
+async fn fetch_apply_replaces_a_manual_text_and_keeps_the_original() {
+    let fixture = Fixture::new(
+        vec![],
+        vec![Ok(vec![lrclib_track(
+            9,
+            "Song",
+            "Artist",
+            "[00:01.00]Fetched\n",
+        )])],
+    );
+    let key = record_key("Song", "Artist");
+
+    let (status, _) = fixture
+        .request(
+            Method::POST,
+            "/api/library",
+            Some(json!({
+                "title": "Song",
+                "artist": "Artist",
+                "text": "[00:01.00]Manual\n",
+                "source": "manual"
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, body) = fixture
+        .request(
+            Method::POST,
+            "/api/lyrics/fetch",
+            Some(json!({ "item_key": key, "apply": true })),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["record_key"], key);
+    assert_eq!(body["source"], "lrclib");
+    assert!(body["original"].is_object());
+
+    let stored = fixture.library.get(&key).expect("item is stored");
+    assert!(stored.text.contains("Fetched"));
+    assert!(!stored.text.contains("Manual"));
+    assert!(stored.original.is_some());
+}
+
+#[tokio::test]
 async fn stale_lookup_results_do_not_replace_the_new_track() {
     use std::sync::atomic::{AtomicBool, Ordering};
 

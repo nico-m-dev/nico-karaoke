@@ -614,6 +614,17 @@ body[data-state="playing"] .idle {
   color: var(--accent);
 }
 
+.ghost:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.ghost.primary:disabled {
+  border-color: var(--panel-border);
+  background: transparent;
+  color: var(--dim);
+}
+
 .detail-text {
   width: 100%;
   min-height: 16rem;

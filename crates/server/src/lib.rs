@@ -13,7 +13,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{any, get, post};
 use nico_karaoke_core::AppConfig;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::watcher::Watcher;
 
@@ -28,6 +28,7 @@ pub struct AppState {
 /// fixtures without touching the process environment or a real player.
 pub fn app(state: AppState) -> Router {
     let static_files = ServeDir::new(state.web_dir.as_ref());
+    let editor_page = ServeFile::new(state.web_dir.join("editor.html"));
     let api = Router::new()
         .route("/api/health", get(api::health))
         .route("/api/now", get(api::now))
@@ -42,12 +43,15 @@ pub fn app(state: AppState) -> Router {
         .route("/api/player", post(api::choose_player))
         .route("/api/control", post(api::control))
         .route("/api/lyrics", post(api::save_current_lyrics))
+        .route("/api/lyrics/parse", post(api::parse_lyrics))
         .route("/api/lyrics/offset", post(api::set_offset))
         .route("/api/lyrics/fetch", post(api::fetch_lyrics))
         .route("/api", any(api::not_found))
         .route("/api/{*path}", any(api::not_found));
 
-    api.fallback_service(static_files)
+    api.route_service("/editor", editor_page.clone())
+        .route_service("/editor/", editor_page)
+        .fallback_service(static_files)
         .layer(DefaultBodyLimit::max(api::MAX_BODY))
         .layer(middleware::from_fn(api::no_store))
         .layer(middleware::from_fn_with_state(

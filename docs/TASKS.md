@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 7 complete. Phase 8 is next.
+Status: Phase 8 complete. Phase 9 is next.
 
 ## Phase 1 — Foundation
 
@@ -144,17 +144,38 @@ Acceptance:
 
 ## Phase 8 — Studio UI
 
-- [ ] Studio route and loading by key or current track. The Studio is a server-rendered route
-  (`/editor`), not a client-side catch-all; unknown paths stay 404.
-- [ ] Header, dirty state, save, fetch, restore original, raw LRC.
-- [ ] Timeline with rulers, markers, playhead, zoom, fit, click-to-seek, drag-to-retime.
-- [ ] Line list with inline time/text editing, sorting, add line, add music, delete.
-- [ ] Inspector with nudges, take-current-time, preview, music toggle, delete.
-- [ ] Tap mode with countdown, correction, and backspace.
-- [ ] Undo stack and keyboard shortcuts.
-- [ ] Legacy `[end:]` migration when opening an item.
-- [ ] Unsaved-changes guard.
-- [ ] Studio tests and manual acceptance matrix.
+- [x] Studio route and loading by key or current track. The Studio is a real server route
+  (`/editor`) with its own Vite entry; unknown paths stay 404.
+- [x] Header, dirty state, save, fetch, restore original, raw LRC.
+- [x] Timeline with rulers, markers, playhead, zoom, fit, click-to-seek, drag-to-retime.
+- [x] Line list with inline time/text editing, sorting, add line, add music, delete.
+- [x] Inspector with nudges, take-current-time, preview, music toggle, delete.
+- [x] Tap mode with countdown, correction, and backspace.
+- [x] Undo stack and keyboard shortcuts.
+- [x] Legacy `[end:]` migration when opening an item.
+- [x] Unsaved-changes guard.
+- [x] Server-side raw-LRC parsing endpoint so the editor and player share one parser.
+- [x] Studio tests and manual acceptance matrix.
+
+Acceptance:
+
+- [x] `/editor` and `/editor?key=…` load in the real server and in Vite development; unknown
+  routes still return 404.
+- [x] The Studio opens from a library detail and directly for the current track.
+- [x] Timeline markers select and seek, dragging retimes with undo, the ruler seeks, labels
+  hide when they do not fit, and zoom/fit work.
+- [x] Inline text and time edits mark the item dirty, re-sort, and persist through an explicit
+  save.
+- [x] Add line, add music, delete, music toggle, nudges, take-current-time, and undo work.
+- [x] Preview pauses, seeks 1.5 s before the line, plays, and pauses 1.5 s after it.
+- [x] Tap mode counts down, starts at zero, applies the configured correction, accepts
+  Backspace, and returns to the editor.
+- [x] Legacy `[end:]` tags become `♪` markers with a visible notice until saved.
+- [x] Raw LRC apply, restore original, fetch, and the unsaved-changes guard behave correctly.
+- [x] NL/EN labels update without losing the document.
+- [x] `cargo fmt`, `cargo clippy -- -D warnings`, `cargo test`, the Windows platform check,
+  and `npm` typecheck/lint/format/test/build pass.
+- [x] Live Chromium checks against a stateful fake MPRIS player cover the flows above.
 
 ## Phase 9 — Hardening
 
@@ -167,6 +188,13 @@ Acceptance:
 - [ ] Linux and Windows manual player matrix.
 
 ## Phase 10 — Packaging
+
+Before packaging starts, the owner runs the app in development and confirms it is ready:
+
+- [ ] Owner acceptance run in dev: use the app end to end locally and confirm packaging may
+  start. This box belongs to the owner; agents wait until it is checked.
+
+Then:
 
 - [ ] Embedded frontend assets in the release binary.
 - [ ] Linux and Windows release builds in CI.
