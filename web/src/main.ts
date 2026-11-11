@@ -535,7 +535,7 @@ function renderPlayers(players: PlayerInfo[], track: Track | null): void {
 function showChrome(): void {
   els.stage.classList.remove("chrome-hidden");
   clearTimeout(chromeTimer);
-  if (document.body.dataset.state === "playing" && els.library.hidden) {
+  if (document.body.dataset.playing === "true" && els.library.hidden) {
     chromeTimer = window.setTimeout(() => {
       els.stage.classList.add("chrome-hidden");
     }, 3000);

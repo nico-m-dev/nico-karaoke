@@ -200,16 +200,21 @@ impl MediaTracker {
             }
         }
 
-        let chosen = self.pick().cloned();
-        if self.preferred.is_none() {
-            if let Some(snapshot) = &chosen {
-                if snapshot.playing {
-                    self.preferred = Some(snapshot.player.clone());
+        let keep_previous =
+            self.preferred.is_some() && self.preferred_misses == 1 && self.snapshot.is_some();
+
+        if !keep_previous {
+            let chosen = self.pick().cloned();
+            if self.preferred.is_none() {
+                if let Some(snapshot) = &chosen {
+                    if snapshot.playing {
+                        self.preferred = Some(snapshot.player.clone());
+                    }
                 }
             }
+            self.chosen = chosen.as_ref().map(|snapshot| snapshot.player.clone());
+            self.snapshot = chosen.filter(|snapshot| !snapshot.title.is_empty());
         }
-        self.chosen = chosen.as_ref().map(|snapshot| snapshot.player.clone());
-        self.snapshot = chosen.filter(|snapshot| !snapshot.title.is_empty());
 
         let signature = self.snapshot.as_ref().map(PlayerSnapshot::signature);
         let track_changed = signature != self.signature;
@@ -409,6 +414,10 @@ mod tests {
         );
         assert_eq!(update.state.snapshot, Some(playing.clone()));
 
+        let kept = tracker.update(vec![idle.clone()]);
+        assert_eq!(kept.state.chosen.as_deref(), Some(playing.player.as_str()));
+        assert!(!kept.track_changed);
+
         let update = tracker.update(vec![idle.clone()]);
         assert_eq!(update.state.chosen.as_deref(), Some(idle.player.as_str()));
         assert!(update.track_changed);
@@ -426,6 +435,10 @@ mod tests {
         assert!(tracker.choose("player-b"));
         let update = tracker.update(vec![first, second.clone()]);
         assert_eq!(update.state.chosen.as_deref(), Some("player-b"));
+
+        let kept = tracker.update(vec![snapshot("player-a", "Song A", "Artist")]);
+        assert_eq!(kept.state.chosen.as_deref(), Some("player-b"));
+        assert!(!kept.track_changed);
 
         let fallback = tracker.update(vec![snapshot("player-a", "Song A", "Artist")]);
         assert_eq!(fallback.state.chosen.as_deref(), Some("player-a"));
@@ -503,8 +516,15 @@ mod tests {
         tracker.update(vec![first.clone(), second.clone()]);
         assert!(tracker.choose("player-b"));
 
-        let fallback = tracker.update(vec![first.clone()]);
-        assert_eq!(fallback.state.chosen.as_deref(), Some("player-a"));
+        let kept = tracker.update(vec![first.clone()]);
+        assert_eq!(kept.state.chosen.as_deref(), Some("player-b"));
+        assert_eq!(
+            kept.state
+                .snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.title.as_str()),
+            Some("Song B")
+        );
         assert_eq!(tracker.preferred.as_deref(), Some("player-b"));
 
         let restored = tracker.update(vec![first, second]);
