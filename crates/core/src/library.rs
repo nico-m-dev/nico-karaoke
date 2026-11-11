@@ -280,21 +280,20 @@ impl Library {
             .as_ref()
             .map(|record| record.text.as_str())
             .unwrap_or_default();
+        let caller_text = normalize_text(&record.text);
+        let mut manual_edit_wins = false;
 
-        if !external.is_empty() && external != current_text {
-            let incoming = normalize_text(&record.text);
-            if incoming == current_text {
-                // Offset or metadata update on a stale copy: the manual edit wins.
-                record.text = external;
-                record.source = LyricsSource::Manual;
-            }
-            // Otherwise the caller deliberately wrote new text, so that text wins.
+        // If a hand-edited .lrc differs from the stored text, a metadata-only update keeps
+        // the manual edit. A caller that deliberately writes new text wins instead.
+        if !external.is_empty() && external != current_text && caller_text == current_text {
+            record.text = external;
+            record.source = LyricsSource::Manual;
+            manual_edit_wins = true;
         }
 
         if let Some(current) = &current {
-            let incoming_text = normalize_text(&record.text);
-            if incoming_text == current.text {
-                if record.source == LyricsSource::Manual {
+            if caller_text == current.text {
+                if !manual_edit_wins && record.source == LyricsSource::Manual {
                     record.source = current.source;
                 }
                 if record.lrclib_id.is_none() {
@@ -488,27 +487,24 @@ fn remove_pair(path: &Path) -> Result<(), LibraryError> {
         match fs::remove_file(&target) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(source) => {
-                return Err(LibraryError::Remove {
-                    path: target,
-                    source,
-                });
-            }
+            Err(source) => return Err(LibraryError::Remove { source }),
         }
     }
     Ok(())
 }
 
 fn validate_key(key: &str) -> Result<(), LibraryError> {
-    let valid = !key.is_empty()
-        && key.len() <= 64
+    if key.is_empty() {
+        return Err(LibraryError::MissingKey);
+    }
+    let valid = key.len() <= 64
         && key.chars().all(|character| {
             character.is_ascii_alphanumeric() || character == '-' || character == '_'
         });
     if valid {
         Ok(())
     } else {
-        Err(LibraryError::InvalidKey(key.to_owned()))
+        Err(LibraryError::InvalidKey)
     }
 }
 
@@ -527,17 +523,14 @@ pub enum LibraryError {
     Json(#[from] serde_json::Error),
     #[error("record has no key")]
     MissingKey,
-    #[error("invalid library key: {0}")]
-    InvalidKey(String),
+    #[error("invalid library key")]
+    InvalidKey,
     #[error("record has no text")]
     EmptyText,
     #[error("unsupported library version {0}")]
     UnsupportedVersion(u32),
-    #[error("could not remove {path}: {source}")]
-    Remove {
-        path: PathBuf,
-        source: std::io::Error,
-    },
+    #[error("could not remove a library file: {source}")]
+    Remove { source: std::io::Error },
 }
 
 #[cfg(test)]
@@ -664,11 +657,11 @@ mod tests {
         let error = library
             .put(item.clone())
             .expect_err("unsafe key is rejected");
-        assert!(matches!(error, LibraryError::InvalidKey(_)));
+        assert!(matches!(error, LibraryError::InvalidKey));
 
         item.key = "key/with/slash".to_owned();
         let error = library.put(item).expect_err("slash key is rejected");
-        assert!(matches!(error, LibraryError::InvalidKey(_)));
+        assert!(matches!(error, LibraryError::InvalidKey));
 
         let path = library.path_for(&LyricRecord::new(
             "../../escape",
@@ -702,6 +695,34 @@ mod tests {
         assert_eq!(saved.lrclib_id, Some(42));
         assert_eq!(saved.fetched_at, 111.0);
         assert!(saved.original.is_some());
+    }
+
+    #[test]
+    fn preserves_provenance_when_a_manual_edit_wins() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let mut item = record("key-1", "Song", "Artist", "First\n");
+        item.lrclib_id = Some(42);
+        item.fetched_at = 111.0;
+        item.original = Some(OriginalLyrics {
+            text: "[00:01.00]Original\n".to_owned(),
+            source: LyricsSource::Lrclib,
+            fetched_at: 111.0,
+            lrclib_id: Some(42),
+            synced: true,
+        });
+        let saved = library.put(item).expect("record saves");
+        let (_, lrc_path) = files_for(&library, &saved);
+        fs::write(&lrc_path, "Hand edit\n").expect("manual edit");
+
+        let fresh = LyricRecord::new("key-1", "Song", "Artist", "First\n");
+        let updated = library.put(fresh).expect("fresh metadata save succeeds");
+
+        assert_eq!(updated.text, "Hand edit\n");
+        assert_eq!(updated.source, LyricsSource::Manual);
+        assert_eq!(updated.lrclib_id, Some(42));
+        assert_eq!(updated.fetched_at, 111.0);
+        assert!(updated.original.is_some());
     }
 
     #[test]
