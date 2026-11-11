@@ -103,15 +103,23 @@ fn init_tracing(data_dir: &std::path::Path) -> Option<WorkerGuard> {
         .unwrap_or_else(|_| EnvFilter::new("nico_karaoke_server=info,tower_http=warn"));
 
     if let Err(error) = std::fs::create_dir_all(data_dir) {
-        eprintln!(
-            "warning: cannot create data directory {}: {error}",
-            data_dir.display()
-        );
+        eprintln!("warning: cannot create the data directory: {error}");
         fmt().with_env_filter(filter).with_target(false).init();
         return None;
     }
 
-    let file_appender = tracing_appender::rolling::never(data_dir, LOG_FILE_NAME);
+    let file_appender = match tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::NEVER)
+        .filename_prefix(LOG_FILE_NAME)
+        .build(data_dir)
+    {
+        Ok(appender) => appender,
+        Err(error) => {
+            eprintln!("warning: cannot create the log file: {error}");
+            fmt().with_env_filter(filter).with_target(false).init();
+            return None;
+        }
+    };
     let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::registry()

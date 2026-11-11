@@ -190,13 +190,15 @@ impl Library {
                         warnings.push(format!(
                             "duplicate key {} in {}",
                             record.key,
-                            path.display()
+                            relative_display(&path, &dir)
                         ));
                     }
                     state.files.insert(record.key.clone(), path);
                     state.records.insert(record.key.clone(), record);
                 }
-                Err(error) => warnings.push(format!("{}: {error}", path.display())),
+                Err(error) => {
+                    warnings.push(format!("{}: {error}", relative_display(&path, &dir)));
+                }
             }
         }
 
@@ -263,9 +265,7 @@ impl Library {
     /// hand, a metadata-only update keeps that edit instead of overwriting it.
     pub fn put(&self, mut record: LyricRecord) -> Result<LyricRecord, LibraryError> {
         let key = record.key.trim().to_owned();
-        if key.is_empty() {
-            return Err(LibraryError::MissingKey);
-        }
+        validate_key(&key)?;
 
         let mut state = self.write_state();
         let current = state.records.get(&key).cloned();
@@ -289,6 +289,29 @@ impl Library {
                 record.source = LyricsSource::Manual;
             }
             // Otherwise the caller deliberately wrote new text, so that text wins.
+        }
+
+        if let Some(current) = &current {
+            let incoming_text = normalize_text(&record.text);
+            if incoming_text == current.text {
+                if record.source == LyricsSource::Manual {
+                    record.source = current.source;
+                }
+                if record.lrclib_id.is_none() {
+                    record.lrclib_id = current.lrclib_id;
+                }
+                if record.fetched_at <= 0.0 {
+                    record.fetched_at = current.fetched_at;
+                }
+            }
+            // The first fetched text stays available even when the working text changes.
+            if record.original.is_none() {
+                record.original = current.original.clone();
+            }
+        }
+
+        if record.updated_at <= 0.0 {
+            record.updated_at = unix_now();
         }
 
         let shaped = shape(record)?;
@@ -334,7 +357,19 @@ impl Library {
         } else {
             stem
         };
-        let suffix: String = record.key.chars().take(10).collect();
+        let suffix: String = record
+            .key
+            .chars()
+            .filter(|character| {
+                character.is_ascii_alphanumeric() || *character == '-' || *character == '_'
+            })
+            .take(10)
+            .collect();
+        let suffix = if suffix.is_empty() {
+            "record".to_owned()
+        } else {
+            suffix
+        };
         self.dir.join(format!("{stem}-{suffix}.json"))
     }
 
@@ -353,6 +388,13 @@ impl Library {
 
 fn default_version() -> u32 {
     LIBRARY_VERSION
+}
+
+fn relative_display(path: &Path, directory: &Path) -> String {
+    path.strip_prefix(directory)
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }
 
 fn load_record(path: &Path) -> Result<LyricRecord, LibraryError> {
@@ -376,9 +418,7 @@ fn load_record(path: &Path) -> Result<LyricRecord, LibraryError> {
 
 fn shape(mut record: LyricRecord) -> Result<LyricRecord, LibraryError> {
     let key = record.key.trim().to_owned();
-    if key.is_empty() {
-        return Err(LibraryError::MissingKey);
-    }
+    validate_key(&key)?;
 
     let text = normalize_text(&record.text);
     if text.trim().is_empty() {
@@ -444,7 +484,7 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), LibraryError> {
 }
 
 fn remove_pair(path: &Path) -> Result<(), LibraryError> {
-    for target in [path.to_path_buf(), path.with_extension("lrc")] {
+    for target in [path.with_extension("lrc"), path.to_path_buf()] {
         match fs::remove_file(&target) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::NotFound => {}
@@ -459,6 +499,26 @@ fn remove_pair(path: &Path) -> Result<(), LibraryError> {
     Ok(())
 }
 
+fn validate_key(key: &str) -> Result<(), LibraryError> {
+    let valid = !key.is_empty()
+        && key.len() <= 64
+        && key.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(LibraryError::InvalidKey(key.to_owned()))
+    }
+}
+
+fn unix_now() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs_f64())
+        .unwrap_or(0.0)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
     #[error("library I/O failed: {0}")]
@@ -467,6 +527,8 @@ pub enum LibraryError {
     Json(#[from] serde_json::Error),
     #[error("record has no key")]
     MissingKey,
+    #[error("invalid library key: {0}")]
+    InvalidKey(String),
     #[error("record has no text")]
     EmptyText,
     #[error("unsupported library version {0}")]
@@ -591,6 +653,67 @@ mod tests {
         let loaded = reopened.get("key-1").expect("record loads");
         assert_eq!(loaded.text, "Edited by hand\n");
         assert_eq!(loaded.source, LyricsSource::Manual);
+    }
+
+    #[test]
+    fn rejects_unsafe_keys_and_keeps_paths_inside_the_library() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let mut item = record("../../escape", "Song", "Artist", "Line\n");
+
+        let error = library
+            .put(item.clone())
+            .expect_err("unsafe key is rejected");
+        assert!(matches!(error, LibraryError::InvalidKey(_)));
+
+        item.key = "key/with/slash".to_owned();
+        let error = library.put(item).expect_err("slash key is rejected");
+        assert!(matches!(error, LibraryError::InvalidKey(_)));
+
+        let path = library.path_for(&LyricRecord::new(
+            "../../escape",
+            "Song",
+            "Artist",
+            "Line\n",
+        ));
+        assert!(path.starts_with(temp.path()));
+    }
+
+    #[test]
+    fn preserves_provenance_on_a_fresh_save() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let mut item = record("key-1", "Song", "Artist", "First\n");
+        item.lrclib_id = Some(42);
+        item.fetched_at = 111.0;
+        item.original = Some(OriginalLyrics {
+            text: "[00:01.00]Original\n".to_owned(),
+            source: LyricsSource::Lrclib,
+            fetched_at: 111.0,
+            lrclib_id: Some(42),
+            synced: true,
+        });
+        library.put(item).expect("record saves");
+
+        let fresh = LyricRecord::new("key-1", "Song", "Artist", "First\n");
+        let saved = library.put(fresh).expect("fresh save succeeds");
+
+        assert_eq!(saved.source, LyricsSource::Lrclib);
+        assert_eq!(saved.lrclib_id, Some(42));
+        assert_eq!(saved.fetched_at, 111.0);
+        assert!(saved.original.is_some());
+    }
+
+    #[test]
+    fn stamps_updated_at_when_missing() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let mut item = record("key-1", "Song", "Artist", "Line\n");
+        item.updated_at = 0.0;
+        let saved = library.put(item).expect("record saves");
+
+        assert!(saved.updated_at > 0.0);
+        assert_eq!(library.summaries()[0].updated_at, saved.updated_at);
     }
 
     #[test]

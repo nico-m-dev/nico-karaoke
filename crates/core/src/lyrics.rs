@@ -159,15 +159,24 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
         }
 
         for time in times {
-            let start = round_millis(time + offset);
-            let line_end = end
-                .filter(|value| *value > time)
-                .map(|value| round_millis(value + offset));
+            let start = round_millis(time);
+            let line_end = end.filter(|value| *value > time).map(round_millis);
             timed.push(LyricLine {
                 t: Some(start),
                 text: body.clone(),
                 end: line_end,
             });
+        }
+    }
+
+    if offset != 0.0 {
+        for line in &mut timed {
+            if let Some(time) = line.t {
+                line.t = Some(round_millis((time + offset).max(0.0)));
+            }
+            if let Some(end) = line.end {
+                line.end = Some(round_millis((end + offset).max(0.0)));
+            }
         }
     }
 
@@ -269,6 +278,21 @@ mod tests {
         assert_eq!(document.lines[0].t, Some(1.5));
         assert_eq!(document.lines[0].text, "First");
         assert_eq!(document.lines[1].t, Some(3.0));
+    }
+
+    #[test]
+    fn applies_offset_to_the_whole_file_regardless_of_tag_position() {
+        let document = parse_lrc("[00:01.00]Before\n[offset:+500]\n[00:02.00]After\n");
+
+        assert_eq!(document.lines[0].t, Some(1.5));
+        assert_eq!(document.lines[1].t, Some(2.5));
+    }
+
+    #[test]
+    fn clamps_negative_times_after_offset() {
+        let document = parse_lrc("[00:00.50]Early\n[offset:-2000]\n");
+
+        assert_eq!(document.lines[0].t, Some(0.0));
     }
 
     #[test]

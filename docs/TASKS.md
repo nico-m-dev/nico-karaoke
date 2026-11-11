@@ -82,6 +82,7 @@ Acceptance:
 - [ ] Player selection endpoint.
 - [ ] Playback control endpoint.
 - [ ] Library list, item, save, create, delete, and original endpoints.
+- [ ] Call synchronous library I/O through `spawn_blocking` so Axum worker threads stay free.
 - [ ] Lyrics lookup endpoint for the current and selected track.
 - [ ] Offset endpoint.
 - [ ] Stable error codes for the frontend.
