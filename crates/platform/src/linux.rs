@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -11,6 +12,7 @@ const OBJECT_PATH: &str = "/org/mpris/MediaPlayer2";
 const PLAYER_IFACE: &str = "org.mpris.MediaPlayer2.Player";
 const ROOT_IFACE: &str = "org.mpris.MediaPlayer2";
 const DBUS_IFACE: &str = "org.freedesktop.DBus";
+const CALL_TIMEOUT: Duration = Duration::from_secs(4);
 
 pub struct LinuxMediaProvider {
     connection: zbus::Connection,
@@ -18,7 +20,10 @@ pub struct LinuxMediaProvider {
 
 impl LinuxMediaProvider {
     pub async fn new() -> Result<Self, MediaError> {
-        let connection = zbus::Connection::session()
+        let connection = zbus::connection::Builder::session()
+            .map_err(|error| MediaError::Unavailable(error.to_string()))?
+            .method_timeout(CALL_TIMEOUT)
+            .build()
             .await
             .map_err(|error| MediaError::Unavailable(error.to_string()))?;
         Ok(Self { connection })
@@ -45,7 +50,7 @@ impl LinuxMediaProvider {
         Ok(players)
     }
 
-    async fn snapshot_for(&self, name: &str) -> Result<Option<PlayerSnapshot>, MediaError> {
+    async fn snapshot_for(&self, name: &str) -> Result<PlayerSnapshot, MediaError> {
         let player = Proxy::new(&self.connection, name, OBJECT_PATH, PLAYER_IFACE)
             .await
             .map_err(backend)?;
@@ -70,7 +75,7 @@ impl LinuxMediaProvider {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| fallback_label(name));
 
-        Ok(Some(PlayerSnapshot {
+        Ok(PlayerSnapshot {
             player: name.to_owned(),
             label,
             title: metadata_text(&metadata, "xesam:title"),
@@ -90,7 +95,7 @@ impl LinuxMediaProvider {
                 .map(round3)
                 .unwrap_or(1.0),
             sampled_at: Instant::now(),
-        }))
+        })
     }
 }
 
@@ -99,11 +104,10 @@ impl MediaProvider for LinuxMediaProvider {
     async fn snapshots(&self) -> Result<Vec<PlayerSnapshot>, MediaError> {
         let mut snapshots = Vec::new();
         for name in self.player_names().await? {
-            match self.snapshot_for(&name).await {
-                Ok(Some(snapshot)) => snapshots.push(snapshot),
-                Ok(None) => {}
-                Err(_) => {
-                    // A player can disappear between ListNames and GetAll.
+            match tokio::time::timeout(CALL_TIMEOUT, self.snapshot_for(&name)).await {
+                Ok(Ok(snapshot)) => snapshots.push(snapshot),
+                Ok(Err(_)) | Err(_) => {
+                    // A player can disappear or stall; keep the other players usable.
                 }
             }
         }

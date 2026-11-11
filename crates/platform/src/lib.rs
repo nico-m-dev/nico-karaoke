@@ -38,6 +38,7 @@ pub async fn create_provider() -> Arc<dyn MediaProvider> {
     {
         match linux::LinuxMediaProvider::new().await {
             Ok(provider) => Arc::new(provider),
+            Err(MediaError::Unavailable(reason)) => Arc::new(UnavailableMediaProvider::new(reason)),
             Err(error) => Arc::new(UnavailableMediaProvider::new(error.to_string())),
         }
     }

@@ -15,6 +15,3 @@ zbus.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true

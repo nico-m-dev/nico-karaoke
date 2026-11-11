@@ -107,6 +107,8 @@ pub enum MediaError {
     PlayerNotFound(String),
     #[error("this player does not support {0}")]
     NotSupported(&'static str),
+    #[error("invalid value for {0}")]
+    InvalidValue(&'static str),
     #[error("media backend error: {0}")]
     Backend(String),
 }
@@ -154,7 +156,9 @@ pub struct MediaUpdate {
 #[derive(Debug, Default)]
 pub struct MediaTracker {
     players: Vec<PlayerInfo>,
+    snapshots: Vec<PlayerSnapshot>,
     snapshot: Option<PlayerSnapshot>,
+    preferred: Option<String>,
     chosen: Option<String>,
     signature: Option<String>,
     generation: u64,
@@ -171,11 +175,27 @@ impl MediaTracker {
     }
 
     pub fn update(&mut self, snapshots: Vec<PlayerSnapshot>) -> MediaUpdate {
-        self.players = snapshots.iter().map(PlayerSnapshot::info).collect();
+        self.snapshots = snapshots;
+        self.players = self
+            .snapshots
+            .iter()
+            .filter(|snapshot| !snapshot.title.is_empty())
+            .map(PlayerSnapshot::info)
+            .collect();
 
-        let chosen = self.pick(&snapshots).cloned();
+        if let Some(preferred) = &self.preferred {
+            if !self
+                .snapshots
+                .iter()
+                .any(|snapshot| snapshot.player == *preferred)
+            {
+                self.preferred = None;
+            }
+        }
+
+        let chosen = self.pick().cloned();
         self.chosen = chosen.as_ref().map(|snapshot| snapshot.player.clone());
-        self.snapshot = chosen;
+        self.snapshot = chosen.filter(|snapshot| !snapshot.title.is_empty());
 
         let signature = self.snapshot.as_ref().map(PlayerSnapshot::signature);
         let track_changed = signature != self.signature;
@@ -190,35 +210,50 @@ impl MediaTracker {
         }
     }
 
-    fn pick<'a>(&self, snapshots: &'a [PlayerSnapshot]) -> Option<&'a PlayerSnapshot> {
-        if let Some(chosen) = &self.chosen {
-            if let Some(found) = snapshots
+    fn pick(&self) -> Option<&PlayerSnapshot> {
+        if let Some(preferred) = &self.preferred {
+            if let Some(found) = self
+                .snapshots
                 .iter()
-                .find(|snapshot| snapshot.player == *chosen && !snapshot.title.is_empty())
+                .find(|snapshot| snapshot.player == *preferred)
             {
                 return Some(found);
             }
         }
 
-        snapshots
+        self.snapshots
             .iter()
             .find(|snapshot| snapshot.playing && !snapshot.title.is_empty())
-            .or_else(|| snapshots.iter().find(|snapshot| !snapshot.title.is_empty()))
+            .or_else(|| {
+                self.snapshots
+                    .iter()
+                    .find(|snapshot| !snapshot.title.is_empty())
+            })
     }
 
+    /// Select a player immediately. The next poll keeps this preference even if the player
+    /// briefly reports an empty title while switching tracks.
     pub fn choose(&mut self, player: &str) -> bool {
-        let known = self
-            .players
+        let Some(found) = self
+            .snapshots
             .iter()
-            .any(|candidate| candidate.player == player)
-            || self
-                .snapshot
-                .as_ref()
-                .is_some_and(|snapshot| snapshot.player == player);
-        if known {
-            self.chosen = Some(player.to_owned());
+            .find(|snapshot| snapshot.player == player)
+            .cloned()
+        else {
+            return false;
+        };
+
+        self.preferred = Some(player.to_owned());
+        self.chosen = Some(player.to_owned());
+        self.snapshot = (!found.title.is_empty()).then_some(found);
+
+        let signature = self.snapshot.as_ref().map(PlayerSnapshot::signature);
+        let track_changed = signature != self.signature;
+        if track_changed {
+            self.generation = self.generation.wrapping_add(1);
         }
-        known
+        self.signature = signature;
+        true
     }
 
     pub fn state(&self) -> MediaState {
@@ -249,12 +284,18 @@ impl MediaTracker {
             PlaybackControl::Play => PlaybackAction::Play,
             PlaybackControl::Pause => PlaybackAction::Pause,
             PlaybackControl::SeekRelative { delta } => {
+                if !delta.is_finite() {
+                    return Err(MediaError::InvalidValue("seek delta"));
+                }
                 if !snapshot.can_seek {
                     return Err(MediaError::NotSupported("seek"));
                 }
                 PlaybackAction::Seek { delta }
             }
             PlaybackControl::SeekTo { position } => {
+                if !position.is_finite() {
+                    return Err(MediaError::InvalidValue("seek position"));
+                }
                 if !snapshot.can_seek {
                     return Err(MediaError::NotSupported("seek"));
                 }
@@ -392,6 +433,82 @@ mod tests {
         let update = tracker.update(vec![snapshot("player", "Other Song", "Artist")]);
         assert!(update.track_changed);
         assert!(update.state.generation > generation);
+    }
+
+    #[tokio::test]
+    async fn choose_updates_the_snapshot_and_control_target_immediately() {
+        let mut first = snapshot("player-a", "Song A", "Artist");
+        first.playing = true;
+        let mut second = snapshot("player-b", "Song B", "Artist");
+        second.playing = true;
+        let provider = FakeMediaProvider::new(vec![first.clone(), second.clone()]);
+        let mut tracker = MediaTracker::new();
+        tracker.update(vec![first, second]);
+
+        assert!(tracker.choose("player-b"));
+        assert_eq!(
+            tracker.snapshot().map(|snapshot| snapshot.player.as_str()),
+            Some("player-b")
+        );
+
+        tracker
+            .control(&provider, PlaybackControl::PlayPause)
+            .await
+            .expect("control works");
+        assert_eq!(provider.actions()[0].0, "player-b");
+    }
+
+    #[tokio::test]
+    async fn keeps_a_preference_through_a_transient_empty_title() {
+        let mut first = snapshot("player-a", "Song A", "Artist");
+        first.playing = true;
+        let mut second = snapshot("player-b", "Song B", "Artist");
+        second.playing = true;
+        let mut tracker = MediaTracker::new();
+        tracker.update(vec![first.clone(), second.clone()]);
+        assert!(tracker.choose("player-b"));
+
+        let update = tracker.update(vec![first.clone(), snapshot("player-b", "", "")]);
+        assert_eq!(update.state.chosen.as_deref(), Some("player-b"));
+        assert!(update.state.snapshot.is_none());
+
+        let update = tracker.update(vec![first, second]);
+        assert_eq!(update.state.chosen.as_deref(), Some("player-b"));
+        assert_eq!(
+            update
+                .state
+                .snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.player.as_str()),
+            Some("player-b")
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_non_finite_seek_values() {
+        let mut item = snapshot("player", "Song", "Artist");
+        item.can_seek = true;
+        item.track_id = "/track/1".to_owned();
+        let provider = FakeMediaProvider::new(vec![item]);
+        let mut tracker = MediaTracker::new();
+        tracker.update(provider.snapshots().await.expect("snapshots"));
+
+        let error = tracker
+            .control(&provider, PlaybackControl::SeekRelative { delta: f64::NAN })
+            .await
+            .expect_err("NaN delta is rejected");
+        assert!(matches!(error, MediaError::InvalidValue("seek delta")));
+
+        let error = tracker
+            .control(
+                &provider,
+                PlaybackControl::SeekTo {
+                    position: f64::INFINITY,
+                },
+            )
+            .await
+            .expect_err("infinite position is rejected");
+        assert!(matches!(error, MediaError::InvalidValue("seek position")));
     }
 
     #[tokio::test]

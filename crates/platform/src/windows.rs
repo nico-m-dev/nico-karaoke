@@ -27,7 +27,7 @@ const KNOWN_APPS: &[(&str, &str)] = &[
     ("vlc", "VLC"),
     ("foobar", "foobar2000"),
     ("music.ui", "Media Player"),
-    ("zunemusic", "Groove"),
+    ("zunemusic", "Media Player"),
     ("wmplayer", "Windows Media Player"),
 ];
 
@@ -200,6 +200,7 @@ async fn snapshot_for(
         .as_ref()
         .and_then(|timeline| timeline.Position().ok())
         .map(ticks_to_seconds)
+        .map(|position| position - start.unwrap_or(0.0))
         .map(|position| {
             if playing {
                 position
@@ -340,10 +341,10 @@ mod tests {
         assert_eq!(label_for("Spotify.exe"), "Spotify");
         assert_eq!(
             label_for("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"),
-            "Groove"
+            "Media Player"
         );
-        assert_eq!(label_for("C:\\Program Files\\VLC\\vlc.exe"), "VLC");
-        assert_eq!(label_for("C:\\Tools\\MyPlayer.exe"), "MyPlayer");
+        assert_eq!(label_for(r"Program Files\VLC\vlc.exe"), "VLC");
+        assert_eq!(label_for(r"Tools\MyPlayer.exe"), "MyPlayer");
     }
 
     #[test]
