@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 5 complete. Phase 6 is next.
+Status: Phase 6 complete. Phase 7 is next.
 
 ## Phase 1 — Foundation
 
@@ -102,15 +102,24 @@ Acceptance:
 
 ## Phase 6 — Player UI
 
-- [ ] Idle screen with library entry point and language switch.
-- [ ] Track title, artist, player picker, and playback controls.
-- [ ] Line rendering with centre line, green fill, upcoming/past styles, and `♪` breaks.
-- [ ] Local position interpolation and smooth scrolling.
-- [ ] Plain-text fallback for unsynchronised lyrics.
-- [ ] Chrome auto-hide, fullscreen, and keyboard shortcuts.
-- [ ] Offset application.
-- [ ] Accessibility and reduced-motion pass.
-- [ ] Frontend tests for fill and active-line calculations.
+- [x] Idle screen with library entry point and language switch.
+- [x] Track title, artist, player picker, and playback controls.
+- [x] Line rendering with centre line, green fill, upcoming/past styles, and `♪` breaks.
+- [x] Local position interpolation and smooth scrolling.
+- [x] Plain-text fallback for unsynchronised lyrics.
+- [x] Chrome auto-hide, fullscreen, and keyboard shortcuts.
+- [x] Offset application.
+- [x] Accessibility and reduced-motion pass.
+- [x] Frontend tests for fill and active-line calculations.
+
+Acceptance:
+
+- [x] The idle screen and a playing track were rendered in headless Chromium against a fake MPRIS player.
+- [x] Synced lines scroll to the centre line, fill green, and stop filling at `♪` markers.
+- [x] Plain lyrics render as a scrollable list without the centre line.
+- [x] No-player, loading, missing, and error states have readable messages.
+- [x] NL/EN switch, player picker, play/pause, library entry point, fullscreen, and keyboard shortcuts work.
+- [x] `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` pass.
 
 ## Phase 7 — Library UI
 

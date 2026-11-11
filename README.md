@@ -10,8 +10,9 @@ does not record audio, download tracks, or play video.
 ## Status
 
 Development phase. The workspace, local server, typed frontend, media providers, lyrics
-lookup, library, watcher, and local API are implemented; the player, library, and Studio UI
-come next. The server binds to `127.0.0.1` by default and validates `Host`/`Origin`.
+lookup, library, watcher, local API, and player UI are implemented; the library browser and
+Studio editor come next. The server binds to `127.0.0.1` by default and validates
+`Host`/`Origin`.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
 
@@ -99,6 +100,23 @@ With a player active, the developer probe prints what the backend sees:
 ```bash
 cargo run -p nico-karaoke-platform --example media_probe
 ```
+
+## Player
+
+The player follows the current track and keeps the active lyric on the centre line. The
+active line fills green until the next line or a `♪` break. Upcoming lines are lighter and
+past lines fade; unsynchronised lyrics fall back to a readable scrollable list.
+
+| Input | Action |
+| --- | --- |
+| `Space` | play / pause the followed player |
+| `F` | toggle fullscreen |
+| player picker | choose which player to follow |
+| `Library` | open the read-only library browser |
+| `NL` / `EN` | switch language from the idle screen |
+
+The bars fade after a few seconds while playing; move the mouse or press a key to bring them
+back.
 
 ## Local API
 

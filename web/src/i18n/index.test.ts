@@ -9,16 +9,11 @@ describe("translation catalogs", () => {
   });
 
   it("interpolates variables", () => {
-    expect(
-      t("en", "status.version", {
-        version: "1.2.3",
-        platform: "linux/x86_64",
-      }),
-    ).toBe("Version 1.2.3 · linux/x86_64");
+    expect(t("en", "player.idle.players", { names: "Spotify" })).toBe("Players found: Spotify");
   });
 
   it("leaves unknown variables visible", () => {
-    expect(t("en", "status.version", { version: "1.2.3" })).toContain("{platform}");
+    expect(t("en", "player.idle.players", {})).toContain("{names}");
   });
 });
 

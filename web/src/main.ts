@@ -1,15 +1,35 @@
 import "./styles.css";
-import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
-
-// Keep this shape in sync with `HealthResponse` in `crates/server/src/api.rs` until shared
-// API types are generated.
-type Health = {
-  status: "ok";
-  name: string;
-  version: string;
-  platform: string;
-  supported: boolean;
-};
+import {
+  ApiError,
+  choosePlayer,
+  getLibrary,
+  getNow,
+  togglePlayback,
+  type LibraryResponse,
+  type LibrarySummary,
+  type Lyrics,
+  type Now,
+  type PlayerInfo,
+  type Track,
+} from "./api";
+import {
+  applyTranslations,
+  detectLanguage,
+  rememberLanguage,
+  t,
+  type Language,
+  type MessageKey,
+} from "./i18n";
+import {
+  fillProgress,
+  findActiveLine,
+  formatTime,
+  isMusicLine,
+  positionAt,
+  targetPosition,
+  updateAnchor,
+  type Anchor,
+} from "./player";
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) {
@@ -17,38 +37,161 @@ if (!appElement) {
 }
 const app: HTMLDivElement = appElement;
 
-let language: Language = detectLanguage();
-let health: Health | null = null;
-let healthError = false;
+app.innerHTML = `
+  <main class="stage" id="stage">
+    <section class="lyrics" id="lyrics" aria-live="off">
+      <div class="viewport" id="viewport">
+        <div class="track" id="track"></div>
+      </div>
+      <div class="centerline" aria-hidden="true"></div>
+    </section>
 
-function renderShell(): void {
-  app.innerHTML = `
-    <main class="shell">
-      <header class="masthead">
+    <header class="bar top" id="topbar">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="titles">
+        <span class="song-title" id="song-title"></span>
+        <span class="song-artist" id="song-artist"></span>
+      </div>
+      <label class="player-pick">
+        <span class="sr-only" data-i18n="player.players.aria"></span>
+        <select id="players" hidden></select>
+      </label>
+      <button class="ghost" id="library-btn" type="button" data-i18n="player.library"></button>
+      <button class="ghost icon" id="fullscreen-btn" type="button" data-i18n-title="player.fullscreen" data-i18n-aria-label="player.fullscreen">⛶</button>
+    </header>
+
+    <footer class="bar bottom" id="controls" hidden>
+      <button class="play" id="play" type="button" data-i18n-title="player.playpause" data-i18n-aria-label="player.playpause">▶</button>
+      <span class="time" id="time">0:00</span>
+    </footer>
+
+    <section class="idle" id="idle">
+      <div class="idle-inner">
+        <p class="mark" aria-hidden="true">NK</p>
+        <p class="eyebrow" data-i18n="app.title"></p>
+        <h1 data-i18n="player.idle.title"></h1>
+        <p class="hint" data-i18n="player.idle.lead"></p>
+        <p class="hint players-hint" id="idle-hint"></p>
+        <div class="idle-actions">
+          <button class="ghost" id="library-idle" type="button" data-i18n="player.library"></button>
+          <div class="languages" role="group" data-i18n-aria-label="lang.label">
+            <button type="button" data-language="nl" data-i18n-title="language.nl">NL</button>
+            <button type="button" data-language="en" data-i18n-title="language.en">EN</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="library" id="library" hidden>
+    <aside class="library-card" role="dialog" aria-modal="true" aria-labelledby="library-title">
+      <header class="library-head">
         <div>
-          <p class="eyebrow" data-i18n="app.title"></p>
-          <h1 data-i18n="app.tagline"></h1>
+          <h2 id="library-title" data-i18n="player.library"></h2>
+          <p class="hint" id="library-count"></p>
         </div>
-        <div class="languages" role="group" data-i18n-aria-label="language.label">
-          <button type="button" data-language="en" data-i18n-title="language.en">EN</button>
-          <button type="button" data-language="nl" data-i18n-title="language.nl">NL</button>
-        </div>
+        <button class="ghost icon" id="library-close" type="button" data-i18n-title="player.library.close" data-i18n-aria-label="player.library.close">✕</button>
       </header>
-      <section class="card" aria-live="polite">
-        <p id="status" data-i18n="status.checking"></p>
-        <p id="meta" class="meta"></p>
-      </section>
-    </main>
-  `;
+      <p class="hint" data-i18n="player.library.readonly"></p>
+      <div class="library-list" id="library-list"></div>
+    </aside>
+  </div>
 
-  app.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const next = button.dataset.language;
-      if (next === "en" || next === "nl") {
-        setLanguage(next);
-      }
-    });
-  });
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+`;
+
+function query<T extends Element>(selector: string): T {
+  const node = document.querySelector<T>(selector);
+  if (!node) {
+    throw new Error(`Missing element: ${selector}`);
+  }
+  return node;
+}
+
+const els = {
+  stage: query<HTMLElement>("#stage"),
+  viewport: query<HTMLElement>("#viewport"),
+  track: query<HTMLElement>("#track"),
+  songTitle: query<HTMLElement>("#song-title"),
+  songArtist: query<HTMLElement>("#song-artist"),
+  players: query<HTMLSelectElement>("#players"),
+  controls: query<HTMLElement>("#controls"),
+  play: query<HTMLButtonElement>("#play"),
+  time: query<HTMLElement>("#time"),
+  idle: query<HTMLElement>("#idle"),
+  idleHint: query<HTMLElement>("#idle-hint"),
+  library: query<HTMLElement>("#library"),
+  libraryList: query<HTMLElement>("#library-list"),
+  libraryCount: query<HTMLElement>("#library-count"),
+  libraryClose: query<HTMLButtonElement>("#library-close"),
+  toast: query<HTMLElement>("#toast"),
+};
+
+const emptyLyrics: Lyrics = {
+  state: "none",
+  signature: null,
+  record_key: null,
+  synced: false,
+  offset: 0,
+  source: null,
+  title: "",
+  artist: "",
+  album: "",
+  duration: null,
+  text: "",
+  lines: [],
+  lrclib_id: null,
+  fetched_at: 0,
+  updated_at: 0,
+  original: null,
+  error: null,
+};
+
+let language: Language = detectLanguage();
+let data: Now = { track: null, players: [], lyrics: emptyLyrics };
+let anchor: Anchor | null = null;
+let lines: Lyrics["lines"] = [];
+let lineEls: HTMLElement[] = [];
+let activeIndex = -2;
+let activeDone = false;
+let plainMode = false;
+let offsetSeconds = 0;
+let lyricsKey = "";
+let idleTimer = 0;
+let chromeTimer = 0;
+let toastTimer = 0;
+let lastTimeText = "";
+let pollBusy = false;
+let controlBusy = false;
+let selectionBusy = false;
+let offlineShown = false;
+let libraryData: LibraryResponse | null = null;
+
+const ERROR_KEYS: Record<string, MessageKey> = {
+  forbidden_host: "player.error.generic",
+  invalid_json: "player.error.request_failed",
+  unsupported_media_type: "player.error.request_failed",
+  payload_too_large: "player.error.request_failed",
+  no_current_track: "player.error.no_current_track",
+  player_not_found: "player.error.player_not_found",
+  lyrics_pending: "player.error.lyrics_pending",
+  lyrics_unavailable: "player.error.lyrics_unavailable",
+  request_failed: "player.error.request_failed",
+};
+
+function trackKey(track: Track | null): string {
+  return track ? `${track.player}|${track.title}|${track.artist}` : "";
+}
+
+function lyricsCacheKey(lyrics: Lyrics): string {
+  return [
+    lyrics.state,
+    lyrics.record_key ?? "",
+    lyrics.offset,
+    lyrics.updated_at,
+    lyrics.lines.length,
+    lyrics.synced,
+  ].join("|");
 }
 
 function setLanguage(next: Language, persist = true): void {
@@ -60,73 +203,561 @@ function setLanguage(next: Language, persist = true): void {
   document.title = t(next, "app.title");
   applyTranslations(app, next);
   updateLanguageButtons();
-  renderStatus();
+  updateTrackTexts(data.track);
+  updateIdleHint(data.players);
+  updatePlayButton(data.track);
+  updateTime(positionAt(anchor, performance.now()));
+  rebuildLyrics(data.lyrics);
+  if (libraryData) {
+    renderLibrary(libraryData);
+  }
 }
 
 function updateLanguageButtons(): void {
-  app.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
+  document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.language === language));
   });
 }
 
-function renderStatus(): void {
-  const status = app.querySelector<HTMLParagraphElement>("#status");
-  const meta = app.querySelector<HTMLParagraphElement>("#meta");
-  if (!status || !meta) {
+function updateTrackTexts(track: Track | null): void {
+  if (!track) {
+    els.songTitle.textContent = t(language, "app.title");
+    els.songArtist.textContent = t(language, "player.waiting");
+    return;
+  }
+  els.songTitle.textContent = track.title || t(language, "player.unknown_track");
+  els.songArtist.textContent = [track.artist, track.label].filter(Boolean).join(" · ");
+}
+
+function updateIdleHint(players: PlayerInfo[]): void {
+  const names = players.map((player) => player.label).filter(Boolean);
+  els.idleHint.textContent = names.length
+    ? t(language, "player.idle.players", { names: names.join(", ") })
+    : "";
+}
+
+function updatePlayers(players: PlayerInfo[], track: Track | null): void {
+  const current = track?.player ?? "";
+  const existing = Array.from(els.players.options).map((option) => option.value);
+  const next = players.map((player) => player.player);
+  const changed =
+    existing.length !== next.length || existing.some((value, index) => value !== next[index]);
+
+  if (changed) {
+    const options = players.map((player) => {
+      const option = document.createElement("option");
+      option.value = player.player;
+      option.textContent = player.label || player.player;
+      return option;
+    });
+    els.players.replaceChildren(...options);
+  }
+
+  const selected = current || players[0]?.player || "";
+  if (selected && els.players.value !== selected) {
+    els.players.value = selected;
+  }
+  els.players.hidden = players.length < 2;
+  updateIdleHint(players);
+}
+
+function updatePlayButton(track: Track | null): void {
+  els.play.disabled = !track;
+  els.play.textContent = track?.playing ? "❚❚" : "▶";
+}
+
+function updateTime(position: number | null): void {
+  const length = data.track?.length;
+  const value = position ?? 0;
+  const text =
+    typeof length === "number" && Number.isFinite(length) && length > 0
+      ? `${formatTime(value)} / ${formatTime(length)}`
+      : formatTime(value);
+  if (text !== lastTimeText) {
+    lastTimeText = text;
+    els.time.textContent = text;
+  }
+}
+
+function rebuildLyrics(lyrics: Lyrics): void {
+  lines = lyrics.lines;
+  lineEls = [];
+  activeIndex = -2;
+  activeDone = false;
+  offsetSeconds = Number.isFinite(lyrics.offset) ? lyrics.offset : 0;
+  els.track.style.transform = "none";
+  els.track.classList.remove("instant");
+
+  if (lyrics.state !== "found" || lines.length === 0) {
+    lineEls = [];
+    const placeholder = document.createElement("p");
+    placeholder.className = "placeholder";
+    placeholder.textContent = placeholderText(lyrics);
+    els.track.replaceChildren(placeholder);
     return;
   }
 
-  if (health) {
-    status.textContent = t(language, "status.ok");
-    meta.textContent = t(language, "status.version", {
-      version: health.version,
-      platform: health.platform,
-    });
-  } else if (healthError) {
-    status.textContent = t(language, "status.error");
-    meta.textContent = "";
-  } else {
-    status.textContent = t(language, "status.checking");
-    meta.textContent = "";
+  const nodes = lines.map((line) => {
+    const element = document.createElement("p");
+    element.className = "line";
+    const instrumental = isMusicLine(line.text);
+
+    if (instrumental) {
+      element.classList.add("instrumental");
+    }
+
+    const base = document.createElement("span");
+    base.className = "text";
+    base.textContent = line.text || "♪";
+    element.append(base);
+
+    if (lyrics.synced && !instrumental && !plainMode) {
+      const fill = document.createElement("span");
+      fill.className = "fill";
+      fill.setAttribute("aria-hidden", "true");
+      fill.textContent = line.text;
+      element.append(fill);
+    }
+
+    lineEls.push(element);
+    return element;
+  });
+
+  els.track.replaceChildren(...nodes);
+  if (!plainMode) {
+    const time = lyricTime();
+    const index = time === null ? 0 : findActiveLine(lines, time);
+    markLines(index, false);
+    requestAnimationFrame(() => centerLine(index >= 0 ? index : 0, true));
   }
 }
 
-async function checkHealth(): Promise<void> {
-  healthError = false;
-  try {
-    const response = await fetch("/api/health", {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`health request failed with ${response.status}`);
-    }
-    const payload: unknown = await response.json();
-    if (!isHealth(payload)) {
-      throw new Error("health response has an unexpected shape");
-    }
-    health = payload;
-  } catch {
-    health = null;
-    healthError = true;
+function placeholderText(lyrics: Lyrics): string {
+  switch (lyrics.state) {
+    case "loading":
+      return t(language, "player.lyrics.loading");
+    case "missing":
+      return t(language, "player.lyrics.missing");
+    case "error":
+      return lyrics.error === "lyrics_unavailable"
+        ? t(language, "player.lyrics.error")
+        : t(language, "player.lyrics.loading");
+    default:
+      return t(language, "player.lyrics.idle");
   }
-  renderStatus();
 }
 
-function isHealth(value: unknown): value is Health {
-  if (typeof value !== "object" || value === null) {
-    return false;
+function lyricTime(): number | null {
+  const position = positionAt(anchor, performance.now());
+  return position === null ? null : position + offsetSeconds;
+}
+
+function tick(): void {
+  requestAnimationFrame(tick);
+  const position = positionAt(anchor, performance.now());
+  if (position !== null) {
+    updateTime(position);
   }
-  const record = value as Record<string, unknown>;
-  return (
-    record.status === "ok" &&
-    typeof record.name === "string" &&
-    typeof record.version === "string" &&
-    typeof record.platform === "string" &&
-    typeof record.supported === "boolean"
+  if (plainMode || !data.lyrics.synced || lines.length === 0) {
+    return;
+  }
+
+  const time = lyricTime();
+  if (time === null) {
+    return;
+  }
+
+  const index = findActiveLine(lines, time);
+  const line = index >= 0 ? lines[index] : null;
+  const done = Boolean(
+    line && typeof line.end === "number" && Number.isFinite(line.end) && time >= line.end,
   );
+
+  if (index !== activeIndex || done !== activeDone) {
+    activeIndex = index;
+    activeDone = done;
+    markLines(index, done);
+    centerLine(index >= 0 ? index : 0);
+  }
+
+  if (index >= 0 && !done) {
+    setFill(index, fillProgress(lines, index, data.track?.length ?? null, time));
+  }
 }
 
-renderShell();
+function markLines(index: number, done: boolean): void {
+  lineEls.forEach((element, lineIndex) => {
+    const past = lineIndex < index || (lineIndex === index && done);
+    element.classList.toggle("active", lineIndex === index && !done);
+    element.classList.toggle("past", past);
+    if (past) {
+      element.style.setProperty("--p", "100%");
+    } else if (lineIndex !== index) {
+      element.style.setProperty("--p", "0%");
+    }
+  });
+}
+
+function setFill(index: number, progress: number): void {
+  lineEls[index]?.style.setProperty("--p", `${(progress * 100).toFixed(2)}%`);
+}
+
+function centerLine(index: number, instant = false): void {
+  if (plainMode) {
+    return;
+  }
+  const line = lineEls[Math.max(0, index)];
+  if (!line) {
+    return;
+  }
+  if (instant) {
+    els.track.classList.add("instant");
+    requestAnimationFrame(() => els.track.classList.remove("instant"));
+  }
+  const y = line.offsetTop + line.offsetHeight / 2;
+  const center = els.viewport.clientHeight / 2;
+  els.track.style.transform = `translateY(${center - y}px)`;
+}
+
+function applyNow(next: Now): void {
+  const previous = data;
+  data = next;
+  const track = next.track;
+  const now = performance.now();
+
+  if (!track) {
+    if (document.body.dataset.state === "playing") {
+      renderPlayers(next.players, null);
+      if (!idleTimer) {
+        idleTimer = window.setTimeout(() => {
+          idleTimer = 0;
+          goIdle(data);
+        }, 2000);
+      }
+      return;
+    }
+    goIdle(next);
+    return;
+  }
+
+  clearTimeout(idleTimer);
+  idleTimer = 0;
+  if (document.body.dataset.state !== "playing") {
+    document.body.dataset.state = "playing";
+    els.controls.hidden = false;
+    showChrome();
+  }
+
+  const sameTrack =
+    previous.track !== null &&
+    trackKey(previous.track) === trackKey(track) &&
+    previous.track.playing === track.playing &&
+    previous.track.rate === track.rate;
+  const target = targetPosition({
+    position: track.position,
+    age: track.age,
+    playing: track.playing,
+    rate: track.rate,
+  });
+
+  if (target !== null) {
+    anchor = updateAnchor(anchor, sameTrack, target, track.playing, track.rate, now);
+  } else if (sameTrack && anchor) {
+    anchor = { ...anchor, playing: track.playing, rate: track.rate };
+  } else {
+    anchor = { pos: 0, at: now, playing: false, rate: 1, ok: false };
+  }
+
+  const nextPlain = !next.lyrics.synced || track.position === null;
+  if (nextPlain !== plainMode) {
+    plainMode = nextPlain;
+    els.stage.classList.toggle("plain", plainMode);
+    lyricsKey = "";
+  }
+
+  updateTrackTexts(track);
+  updatePlayers(next.players, track);
+  updatePlayButton(track);
+  updateTime(positionAt(anchor, now));
+
+  const nextLyricsKey = lyricsCacheKey(next.lyrics);
+  if (nextLyricsKey !== lyricsKey) {
+    lyricsKey = nextLyricsKey;
+    rebuildLyrics(next.lyrics);
+  }
+
+  scheduleChrome();
+}
+
+function goIdle(next: Now): void {
+  clearTimeout(idleTimer);
+  clearTimeout(chromeTimer);
+  idleTimer = 0;
+  anchor = null;
+  plainMode = false;
+  lyricsKey = "";
+  lines = [];
+  lineEls = [];
+  els.stage.classList.remove("plain", "chrome-hidden");
+  document.body.dataset.state = "idle";
+  els.controls.hidden = true;
+  els.songTitle.textContent = t(language, "app.title");
+  els.songArtist.textContent = t(language, "player.waiting");
+  els.track.replaceChildren();
+  els.track.style.transform = "none";
+  renderPlayers(next.players, null);
+}
+
+function renderPlayers(players: PlayerInfo[], track: Track | null): void {
+  updatePlayers(players, track);
+}
+
+function showChrome(): void {
+  els.stage.classList.remove("chrome-hidden");
+  clearTimeout(chromeTimer);
+  if (document.body.dataset.state === "playing" && els.library.hidden) {
+    chromeTimer = window.setTimeout(() => {
+      els.stage.classList.add("chrome-hidden");
+    }, 3000);
+  }
+}
+
+function scheduleChrome(): void {
+  showChrome();
+}
+
+async function poll(): Promise<void> {
+  if (pollBusy) {
+    return;
+  }
+  pollBusy = true;
+  try {
+    const next = await getNow();
+    offlineShown = false;
+    applyNow(next);
+  } catch (error) {
+    if (!offlineShown) {
+      offlineShown = true;
+      showToast(t(language, "player.offline"));
+    }
+    if (error instanceof ApiError) {
+      // Keep the last view; the next poll may recover.
+    }
+  } finally {
+    pollBusy = false;
+  }
+}
+
+async function onPlay(): Promise<void> {
+  if (controlBusy || !data.track) {
+    return;
+  }
+  controlBusy = true;
+  els.play.disabled = true;
+  try {
+    await togglePlayback();
+    await poll();
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    controlBusy = false;
+    updatePlayButton(data.track);
+  }
+}
+
+async function onPlayerChange(): Promise<void> {
+  if (selectionBusy) {
+    return;
+  }
+  const player = els.players.value;
+  if (!player) {
+    return;
+  }
+  selectionBusy = true;
+  els.players.disabled = true;
+  try {
+    await choosePlayer(player);
+    await poll();
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    selectionBusy = false;
+    els.players.disabled = false;
+  }
+}
+
+async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch {
+    // Browsers may reject fullscreen without a direct user gesture; nothing to do.
+  }
+}
+
+function showToast(message: string): void {
+  els.toast.textContent = message;
+  els.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    els.toast.classList.remove("show");
+    els.toast.textContent = "";
+  }, 4200);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const key = ERROR_KEYS[error.code];
+    if (key) {
+      return t(language, key);
+    }
+  }
+  return t(language, "player.error.generic");
+}
+
+async function openLibrary(): Promise<void> {
+  clearTimeout(chromeTimer);
+  els.library.hidden = false;
+  els.libraryClose.focus();
+  els.libraryList.replaceChildren();
+  els.libraryCount.textContent = t(language, "player.lyrics.loading");
+  try {
+    libraryData = await getLibrary();
+    renderLibrary(libraryData);
+  } catch (error) {
+    els.libraryCount.textContent = errorMessage(error);
+  }
+}
+
+function closeLibrary(): void {
+  els.library.hidden = true;
+  showChrome();
+}
+
+function renderLibrary(library: LibraryResponse): void {
+  els.libraryCount.textContent = t(language, "player.library.count", {
+    count: library.items.length,
+  });
+
+  if (library.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint library-empty";
+    empty.textContent = t(language, "player.library.empty");
+    els.libraryList.replaceChildren(empty);
+    return;
+  }
+
+  const nodes = library.items.map((item) => libraryItem(item));
+  els.libraryList.replaceChildren(...nodes);
+}
+
+function libraryItem(item: LibrarySummary): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "library-item";
+  if (item.current) {
+    card.classList.add("current");
+  }
+
+  const title = document.createElement("p");
+  title.className = "library-item-title";
+  title.textContent = item.title || t(language, "player.unknown_track");
+
+  const artist = document.createElement("p");
+  artist.className = "library-item-artist";
+  artist.textContent = [item.artist, item.album].filter(Boolean).join(" · ");
+
+  const meta = document.createElement("p");
+  meta.className = "library-item-meta";
+  const parts = [
+    item.source === "lrclib" ? "LRCLIB" : item.source,
+    item.synced ? t(language, "library.synced") : t(language, "library.plain"),
+    t(language, "library.lines", { count: item.line_count }),
+  ];
+  if (item.current) {
+    parts.unshift(t(language, "player.library.current"));
+  }
+  meta.textContent = parts.filter(Boolean).join(" · ");
+
+  card.append(title, artist, meta);
+  return card;
+}
+
+function bind(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = button.dataset.language;
+      if (next === "en" || next === "nl") {
+        setLanguage(next);
+      }
+    });
+  });
+
+  document.querySelector<HTMLButtonElement>("#library-btn")?.addEventListener("click", () => {
+    void openLibrary();
+  });
+  document.querySelector<HTMLButtonElement>("#library-idle")?.addEventListener("click", () => {
+    void openLibrary();
+  });
+  els.libraryClose.addEventListener("click", closeLibrary);
+  els.library.addEventListener("click", (event) => {
+    if (event.target === els.library) {
+      closeLibrary();
+    }
+  });
+  document.querySelector<HTMLButtonElement>("#fullscreen-btn")?.addEventListener("click", () => {
+    void toggleFullscreen();
+  });
+  els.play.addEventListener("click", () => {
+    void onPlay();
+  });
+  els.players.addEventListener("change", () => {
+    void onPlayerChange();
+  });
+
+  window.addEventListener("mousemove", showChrome, { passive: true });
+  window.addEventListener("keydown", (event) => {
+    showChrome();
+    if (event.key === "Escape") {
+      closeLibrary();
+      return;
+    }
+    if (!els.library.hidden) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      target instanceof HTMLButtonElement
+    ) {
+      return;
+    }
+    if (event.code === "Space") {
+      event.preventDefault();
+      void onPlay();
+    } else if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      void toggleFullscreen();
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void poll();
+      showChrome();
+    }
+  });
+}
+
+bind();
 setLanguage(language, false);
-void checkHealth();
+document.body.dataset.state = "idle";
+void poll();
+window.setInterval(() => {
+  void poll();
+}, 400);
+requestAnimationFrame(tick);
