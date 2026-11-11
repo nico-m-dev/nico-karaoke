@@ -201,6 +201,13 @@ impl MediaTracker {
         }
 
         let chosen = self.pick().cloned();
+        if self.preferred.is_none() {
+            if let Some(snapshot) = &chosen {
+                if snapshot.playing {
+                    self.preferred = Some(snapshot.player.clone());
+                }
+            }
+        }
         self.chosen = chosen.as_ref().map(|snapshot| snapshot.player.clone());
         self.snapshot = chosen.filter(|snapshot| !snapshot.title.is_empty());
 
@@ -444,6 +451,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn keeps_an_auto_chosen_player_when_it_pauses() {
+        let mut first = snapshot("player-a", "Song A", "Artist");
+        first.playing = true;
+        let mut second = snapshot("player-b", "Song B", "Artist");
+        second.playing = false;
+        let mut tracker = MediaTracker::new();
+        tracker.update(vec![first.clone(), second.clone()]);
+        assert_eq!(tracker.state().chosen.as_deref(), Some("player-a"));
+
+        first.playing = false;
+        second.playing = true;
+        let update = tracker.update(vec![first, second]);
+        assert_eq!(update.state.chosen.as_deref(), Some("player-a"));
+        assert_eq!(
+            update.state.snapshot.as_ref().map(|s| s.title.as_str()),
+            Some("Song A")
+        );
+    }
+
+    #[tokio::test]
     async fn choose_updates_the_snapshot_and_control_target_immediately() {
         let mut first = snapshot("player-a", "Song A", "Artist");
         first.playing = true;
@@ -496,7 +523,7 @@ mod tests {
 
         tracker.update(vec![first.clone()]);
         tracker.update(vec![first.clone()]);
-        assert!(tracker.preferred.is_none());
+        assert_eq!(tracker.preferred.as_deref(), Some("player-a"));
         let update = tracker.update(vec![first]);
         assert_eq!(update.state.chosen.as_deref(), Some("player-a"));
     }

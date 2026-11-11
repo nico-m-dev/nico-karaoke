@@ -87,6 +87,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(5000),
     headers: {
       Accept: "application/json",
       ...(init?.headers ?? {}),

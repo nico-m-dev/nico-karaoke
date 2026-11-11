@@ -36,6 +36,11 @@ describe("findActiveLine", () => {
   it("keeps the last line active after the end", () => {
     expect(findActiveLine(lines, 100)).toBe(3);
   });
+
+  it("handles empty and non-finite times", () => {
+    expect(findActiveLine([], 1)).toBe(-1);
+    expect(findActiveLine(lines, Number.NaN)).toBe(-1);
+  });
 });
 
 describe("line timing", () => {
@@ -66,6 +71,7 @@ describe("line timing", () => {
     expect(fillProgress(lines, 2, 30, 6)).toBe(0);
     expect(isMusicLine("♪")).toBe(true);
     expect(isMusicLine("Instrumental")).toBe(true);
+    expect(isMusicLine("instrumentaal")).toBe(true);
     expect(isMusicLine("Text")).toBe(false);
   });
 });
@@ -83,6 +89,8 @@ describe("playback anchor", () => {
   it("interpolates a playing position and keeps a paused one fixed", () => {
     expect(targetPosition({ position: 10, age: 2, playing: true, rate: 1 })).toBe(12);
     expect(targetPosition({ position: 10, age: 2, playing: false, rate: 1 })).toBe(10);
+    expect(targetPosition({ position: 10, age: 2, playing: true, rate: 1, length: 11 })).toBe(11);
+    expect(targetPosition({ position: Number.NaN, age: 2, playing: true, rate: 1 })).toBeNull();
     expect(targetPosition({ position: null, age: 0, playing: true, rate: 1 })).toBeNull();
   });
 

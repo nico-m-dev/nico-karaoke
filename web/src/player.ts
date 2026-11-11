@@ -9,6 +9,7 @@ export type TrackTiming = {
   age: number;
   playing: boolean;
   rate: number;
+  length?: number | null;
 };
 
 export type Anchor = {
@@ -20,7 +21,7 @@ export type Anchor = {
 };
 
 const MUSIC_MARKERS = /^[\s♪♫♬♩🎵🎶·•…\-–—]*$/u;
-const MUSIC_WORDS = /^(?:instrumental|interlude|muziek|music|solo|gitaarsolo)$/i;
+const MUSIC_WORDS = /^(?:instrumental|instrumentaal|interlude|muziek|music|solo|gitaarsolo)$/i;
 
 export function isMusicLine(text: string): boolean {
   const value = text.trim();
@@ -103,7 +104,10 @@ export function targetPosition(track: TrackTiming): number | null {
   }
   const rate = track.rate > 0 && Number.isFinite(track.rate) ? track.rate : 1;
   const age = track.playing ? Math.max(0, track.age) : 0;
-  return Math.max(0, track.position + age * rate);
+  const value = Math.max(0, track.position + age * rate);
+  return typeof track.length === "number" && Number.isFinite(track.length) && track.length > 0
+    ? Math.min(value, track.length)
+    : value;
 }
 
 /**

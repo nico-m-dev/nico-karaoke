@@ -166,6 +166,7 @@ let controlBusy = false;
 let selectionBusy = false;
 let offlineShown = false;
 let libraryData: LibraryResponse | null = null;
+let libraryOpener: HTMLElement | null = null;
 
 const ERROR_KEYS: Record<string, MessageKey> = {
   forbidden_host: "player.error.generic",
@@ -176,6 +177,12 @@ const ERROR_KEYS: Record<string, MessageKey> = {
   player_not_found: "player.error.player_not_found",
   lyrics_pending: "player.error.lyrics_pending",
   lyrics_unavailable: "player.error.lyrics_unavailable",
+  lyrics_not_found: "player.error.lyrics_not_found",
+  not_supported: "player.error.not_supported",
+  player_error: "player.error.player_error",
+  track_changed: "player.error.track_changed",
+  media_unavailable: "player.error.media_unavailable",
+  invalid_value: "player.error.invalid_value",
   request_failed: "player.error.request_failed",
 };
 
@@ -191,6 +198,7 @@ function lyricsCacheKey(lyrics: Lyrics): string {
     lyrics.updated_at,
     lyrics.lines.length,
     lyrics.synced,
+    lyrics.error ?? "",
   ].join("|");
 }
 
@@ -206,7 +214,7 @@ function setLanguage(next: Language, persist = true): void {
   updateTrackTexts(data.track);
   updateIdleHint(data.players);
   updatePlayButton(data.track);
-  updateTime(positionAt(anchor, performance.now()));
+  updateTime(livePosition());
   rebuildLyrics(data.lyrics);
   if (libraryData) {
     renderLibrary(libraryData);
@@ -348,13 +356,24 @@ function placeholderText(lyrics: Lyrics): string {
 }
 
 function lyricTime(): number | null {
-  const position = positionAt(anchor, performance.now());
+  const position = livePosition();
   return position === null ? null : position + offsetSeconds;
+}
+
+function livePosition(): number | null {
+  const position = positionAt(anchor, performance.now());
+  const length = data.track?.length;
+  if (position === null) {
+    return null;
+  }
+  return typeof length === "number" && Number.isFinite(length) && length > 0
+    ? Math.min(position, length)
+    : position;
 }
 
 function tick(): void {
   requestAnimationFrame(tick);
-  const position = positionAt(anchor, performance.now());
+  const position = livePosition();
   if (position !== null) {
     updateTime(position);
   }
@@ -442,6 +461,7 @@ function applyNow(next: Now): void {
 
   clearTimeout(idleTimer);
   idleTimer = 0;
+  document.body.dataset.playing = String(track.playing);
   if (document.body.dataset.state !== "playing") {
     document.body.dataset.state = "playing";
     els.controls.hidden = false;
@@ -458,6 +478,7 @@ function applyNow(next: Now): void {
     age: track.age,
     playing: track.playing,
     rate: track.rate,
+    length: track.length,
   });
 
   if (target !== null) {
@@ -478,15 +499,13 @@ function applyNow(next: Now): void {
   updateTrackTexts(track);
   updatePlayers(next.players, track);
   updatePlayButton(track);
-  updateTime(positionAt(anchor, now));
+  updateTime(livePosition());
 
   const nextLyricsKey = lyricsCacheKey(next.lyrics);
   if (nextLyricsKey !== lyricsKey) {
     lyricsKey = nextLyricsKey;
     rebuildLyrics(next.lyrics);
   }
-
-  scheduleChrome();
 }
 
 function goIdle(next: Now): void {
@@ -500,6 +519,7 @@ function goIdle(next: Now): void {
   lineEls = [];
   els.stage.classList.remove("plain", "chrome-hidden");
   document.body.dataset.state = "idle";
+  document.body.dataset.playing = "false";
   els.controls.hidden = true;
   els.songTitle.textContent = t(language, "app.title");
   els.songArtist.textContent = t(language, "player.waiting");
@@ -520,10 +540,6 @@ function showChrome(): void {
       els.stage.classList.add("chrome-hidden");
     }, 3000);
   }
-}
-
-function scheduleChrome(): void {
-  showChrome();
 }
 
 async function poll(): Promise<void> {
@@ -618,9 +634,20 @@ function errorMessage(error: unknown): string {
   return t(language, "player.error.generic");
 }
 
+function sourceLabel(source: string): string {
+  const keys: Record<string, MessageKey> = {
+    lrclib: "library.source.lrclib",
+    manual: "library.source.manual",
+    tap: "library.source.tap",
+  };
+  return t(language, keys[source] ?? "library.source.unknown");
+}
+
 async function openLibrary(): Promise<void> {
+  libraryOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   clearTimeout(chromeTimer);
   els.library.hidden = false;
+  els.stage.inert = true;
   els.libraryClose.focus();
   els.libraryList.replaceChildren();
   els.libraryCount.textContent = t(language, "player.lyrics.loading");
@@ -633,8 +660,15 @@ async function openLibrary(): Promise<void> {
 }
 
 function closeLibrary(): void {
+  if (els.library.hidden) {
+    return;
+  }
   els.library.hidden = true;
+  els.stage.inert = false;
   showChrome();
+  const opener = libraryOpener;
+  libraryOpener = null;
+  opener?.focus();
 }
 
 function renderLibrary(library: LibraryResponse): void {
@@ -672,7 +706,7 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   const meta = document.createElement("p");
   meta.className = "library-item-meta";
   const parts = [
-    item.source === "lrclib" ? "LRCLIB" : item.source,
+    sourceLabel(item.source),
     item.synced ? t(language, "library.synced") : t(language, "library.plain"),
     t(language, "library.lines", { count: item.line_count }),
   ];
@@ -707,6 +741,28 @@ function bind(): void {
       closeLibrary();
     }
   });
+  els.library.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusables = Array.from(
+      els.library.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => !element.hasAttribute("disabled"));
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (!first || !last) {
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   document.querySelector<HTMLButtonElement>("#fullscreen-btn")?.addEventListener("click", () => {
     void toggleFullscreen();
   });
@@ -717,7 +773,22 @@ function bind(): void {
     void onPlayerChange();
   });
 
+  const recenter = () => {
+    if (plainMode) {
+      return;
+    }
+    if (activeIndex >= 0) {
+      centerLine(activeIndex, true);
+    } else if (lineEls.length > 0) {
+      centerLine(0, true);
+    }
+  };
+  window.addEventListener("resize", recenter);
+  window.addEventListener("orientationchange", recenter);
+  document.addEventListener("fullscreenchange", recenter);
   window.addEventListener("mousemove", showChrome, { passive: true });
+  window.addEventListener("pointerdown", showChrome, { passive: true });
+  window.addEventListener("touchstart", showChrome, { passive: true });
   window.addEventListener("keydown", (event) => {
     showChrome();
     if (event.key === "Escape") {
@@ -731,12 +802,14 @@ function bind(): void {
     if (
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      target instanceof HTMLButtonElement
+      (target instanceof HTMLElement && target.isContentEditable)
     ) {
       return;
     }
     if (event.code === "Space") {
+      if (target instanceof HTMLButtonElement || target instanceof HTMLSelectElement) {
+        return;
+      }
       event.preventDefault();
       void onPlay();
     } else if (event.key.toLowerCase() === "f") {

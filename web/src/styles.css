@@ -221,7 +221,7 @@ select:focus-visible {
   background: var(--dim);
 }
 
-body[data-state="playing"] .dot {
+body[data-playing="true"] .dot {
   background: var(--accent);
   box-shadow: 0 0 0 0.28rem var(--accent-soft);
 }
@@ -327,8 +327,7 @@ body[data-state="playing"] .dot {
     radial-gradient(circle at 50% 35%, rgba(100, 227, 142, 0.1), transparent 26rem), var(--bg);
 }
 
-body[data-state="playing"] .idle,
-body[data-state="plain"] .idle {
+body[data-state="playing"] .idle {
   display: none;
 }
 
