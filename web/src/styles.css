@@ -576,6 +576,25 @@ body[data-state="playing"] .idle {
   font-size: 0.75rem;
 }
 
+.detail-preview {
+  max-height: 12rem;
+  margin: 0.9rem 0 0;
+  padding: 0.8rem;
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.8rem;
+  background: rgba(8, 11, 10, 0.35);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.detail-title:focus {
+  outline: none;
+}
+
 .detail-actions {
   display: flex;
   flex-wrap: wrap;

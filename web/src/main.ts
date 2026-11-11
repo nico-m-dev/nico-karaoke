@@ -35,6 +35,13 @@ import {
   updateAnchor,
   type Anchor,
 } from "./player";
+import {
+  MAX_LYRICS_LENGTH,
+  matchesLibraryQuery,
+  spotifySearchUrl,
+  textIsDirty,
+  youtubeSearchUrl,
+} from "./library";
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) {
@@ -199,6 +206,11 @@ const ERROR_KEYS: Record<string, MessageKey> = {
   track_changed: "player.error.track_changed",
   media_unavailable: "player.error.media_unavailable",
   invalid_value: "player.error.invalid_value",
+  lyrics_too_long: "player.error.lyrics_too_long",
+  library_error: "player.error.library_error",
+  lyrics_empty: "player.error.lyrics_empty",
+  no_original: "player.error.no_original",
+  invalid_key: "player.error.invalid_key",
   request_failed: "player.error.request_failed",
 };
 
@@ -519,8 +531,12 @@ function applyNow(next: Now): void {
   updatePlayButton(track);
   updateTime(livePosition());
 
-  if (trackKey(previous.track) !== trackKey(track) && !els.library.hidden && !selectedKey) {
-    void loadLibrary();
+  if (trackKey(previous.track) !== trackKey(track) && !els.library.hidden) {
+    if (selectedKey && !detailEditing && !detailBusy) {
+      void openDetail(selectedKey);
+    } else if (!selectedKey) {
+      void loadLibrary();
+    }
   }
 
   const nextLyricsKey = lyricsCacheKey(next.lyrics);
@@ -666,6 +682,9 @@ function sourceLabel(source: string): string {
 }
 
 async function openLibrary(): Promise<void> {
+  if (detailBusy) {
+    return;
+  }
   libraryOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   selectedKey = null;
   detailItem = null;
@@ -680,7 +699,7 @@ async function openLibrary(): Promise<void> {
 }
 
 function closeLibrary(): void {
-  if (els.library.hidden) {
+  if (els.library.hidden || detailBusy) {
     return;
   }
   if (detailDirty()) {
@@ -706,6 +725,15 @@ function showLibraryList(): void {
 }
 
 async function refreshLibrary(): Promise<void> {
+  if (detailBusy) {
+    return;
+  }
+  if (detailDirty()) {
+    if (!window.confirm(t(language, "player.library.discard_confirm"))) {
+      return;
+    }
+    detailEditing = false;
+  }
   await loadLibrary();
   if (selectedKey) {
     await openDetail(selectedKey);
@@ -713,7 +741,7 @@ async function refreshLibrary(): Promise<void> {
 }
 
 async function loadLibrary(): Promise<void> {
-  els.libraryCount.textContent = t(language, "player.lyrics.loading");
+  els.libraryCount.textContent = t(language, "player.library.loading");
   try {
     libraryData = await getLibrary();
     if (selectedKey) {
@@ -739,7 +767,11 @@ function renderLibrary(library: LibraryResponse): void {
   });
 
   const query = els.librarySearch.value.trim().toLocaleLowerCase();
-  const items = library.items.filter((item) => matchesQuery(item, query));
+  const items = library.items.filter((item) => matchesLibraryQuery(item, query));
+
+  els.libraryCount.textContent = t(language, "player.library.count", {
+    count: items.length,
+  });
 
   if (items.length === 0) {
     const empty = document.createElement("p");
@@ -754,15 +786,6 @@ function renderLibrary(library: LibraryResponse): void {
 
   const nodes = items.map((item) => libraryItem(item));
   els.libraryList.replaceChildren(...nodes);
-}
-
-function matchesQuery(item: LibrarySummary, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-  return [item.title, item.artist, item.album].some((value) =>
-    value.toLocaleLowerCase().includes(query),
-  );
 }
 
 function libraryItem(item: LibrarySummary): HTMLElement {
@@ -805,13 +828,16 @@ function libraryItem(item: LibrarySummary): HTMLElement {
 }
 
 async function openDetail(key: string): Promise<void> {
+  if (detailBusy) {
+    return;
+  }
   selectedKey = key;
   detailItem = null;
   detailEditing = false;
   els.librarySearch.hidden = true;
   els.libraryList.hidden = true;
   els.libraryDetail.hidden = false;
-  els.libraryDetail.replaceChildren(hintNode(t(language, "player.lyrics.loading")));
+  els.libraryDetail.replaceChildren(hintNode(t(language, "player.library.loading")));
 
   try {
     const item = await getLibraryItem(key);
@@ -873,6 +899,13 @@ function renderDetail(): void {
     .join(" · ");
   els.libraryDetail.append(meta);
 
+  if (!detailEditing) {
+    const preview = document.createElement("pre");
+    preview.className = "detail-preview";
+    preview.textContent = lyrics.text;
+    els.libraryDetail.append(preview);
+  }
+
   const actions = document.createElement("div");
   actions.className = "detail-actions";
   if (!detailEditing) {
@@ -884,8 +917,8 @@ function renderDetail(): void {
     );
   }
   actions.append(
-    externalLink(t(language, "library.youtube"), youtubeUrl(lyrics)),
-    externalLink(t(language, "library.spotify"), spotifyUrl(lyrics)),
+    externalLink(t(language, "library.youtube"), youtubeSearchUrl(lyrics.title, lyrics.artist)),
+    externalLink(t(language, "library.spotify"), spotifySearchUrl(lyrics.title, lyrics.artist)),
   );
 
   if (lyrics.original) {
@@ -921,6 +954,7 @@ function renderEditor(item: LibraryItemResponse, text = item.lyrics.text): void 
   textarea.spellcheck = false;
   textarea.rows = 12;
   textarea.value = text;
+  textarea.setAttribute("aria-label", t(language, "player.library.editor_aria"));
   textarea.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
@@ -956,10 +990,13 @@ function detailDirty(): boolean {
     return false;
   }
   const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
-  return Boolean(textarea && textarea.value !== detailItem.lyrics.text);
+  return Boolean(textarea && textIsDirty(textarea.value, detailItem.lyrics.text));
 }
 
 async function backToLibrary(): Promise<void> {
+  if (detailBusy) {
+    return;
+  }
   if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
     return;
   }
@@ -976,18 +1013,29 @@ async function saveDetail(): Promise<void> {
   if (!selectedKey || !detailItem || detailBusy) {
     return;
   }
+  const key = selectedKey;
   const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
   const text = textarea?.value ?? "";
   if (!text.trim()) {
-    showToast(t(language, "player.error.generic"));
+    showToast(t(language, "player.error.lyrics_empty"));
+    return;
+  }
+  if (text.length > MAX_LYRICS_LENGTH) {
+    showToast(t(language, "player.error.lyrics_too_long"));
     return;
   }
   detailBusy = true;
   try {
-    detailItem = await saveLibraryItem(selectedKey, text);
+    const updated = await saveLibraryItem(key, text);
+    if (selectedKey !== key) {
+      return;
+    }
+    detailItem = updated;
     detailEditing = false;
     await loadLibrary();
-    renderDetail();
+    if (selectedKey === key) {
+      renderDetail();
+    }
     showToast(t(language, "player.library.saved"));
   } catch (error) {
     showToast(errorMessage(error));
@@ -1000,15 +1048,25 @@ async function restoreDetail(): Promise<void> {
   if (!selectedKey || detailBusy) {
     return;
   }
+  const key = selectedKey;
+  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
+    return;
+  }
   if (!window.confirm(t(language, "player.library.restore_confirm"))) {
     return;
   }
   detailBusy = true;
   try {
-    detailItem = await restoreLibraryOriginal(selectedKey);
+    const updated = await restoreLibraryOriginal(key);
+    if (selectedKey !== key) {
+      return;
+    }
+    detailItem = updated;
     detailEditing = false;
     await loadLibrary();
-    renderDetail();
+    if (selectedKey === key) {
+      renderDetail();
+    }
     showToast(t(language, "player.library.restored"));
   } catch (error) {
     showToast(errorMessage(error));
@@ -1021,18 +1079,25 @@ async function deleteDetail(): Promise<void> {
   if (!selectedKey || !detailItem || detailBusy) {
     return;
   }
+  const key = selectedKey;
   const title = detailItem.lyrics.title || t(language, "player.unknown_track");
   if (!window.confirm(t(language, "player.library.delete_confirm", { title }))) {
     return;
   }
   detailBusy = true;
   try {
-    await deleteLibraryItem(selectedKey);
-    selectedKey = null;
-    detailItem = null;
-    detailEditing = false;
-    showLibraryList();
+    await deleteLibraryItem(key);
+    if (selectedKey === key) {
+      selectedKey = null;
+      detailItem = null;
+      detailEditing = false;
+      showLibraryList();
+    }
     await loadLibrary();
+    if (!selectedKey) {
+      const first = els.libraryList.querySelector<HTMLButtonElement>(".library-item");
+      (first ?? els.libraryClose).focus();
+    }
     showToast(t(language, "player.library.deleted"));
   } catch (error) {
     showToast(errorMessage(error));
@@ -1046,7 +1111,9 @@ function renderDetailError(message: string): void {
   const back = actionButton(t(language, "player.library.back"), () => {
     void backToLibrary();
   });
+  back.classList.add("detail-back");
   els.libraryDetail.append(back, hintNode(message));
+  back.focus();
 }
 
 function actionButton(label: string, action: () => void, className = ""): HTMLButtonElement {
@@ -1088,18 +1155,6 @@ function formatDate(seconds: number): string {
   }
 }
 
-function youtubeUrl(lyrics: Lyrics): string {
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(
-    `${lyrics.title} ${lyrics.artist}`.trim(),
-  )}`;
-}
-
-function spotifyUrl(lyrics: Lyrics): string {
-  return `https://open.spotify.com/search/${encodeURIComponent(
-    `${lyrics.title} ${lyrics.artist}`.trim(),
-  )}`;
-}
-
 function bind(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1138,7 +1193,12 @@ function bind(): void {
       els.library.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       ),
-    ).filter((element) => !element.hasAttribute("disabled"));
+    ).filter(
+      (element) =>
+        !element.hasAttribute("disabled") &&
+        !element.closest("[hidden]") &&
+        element.getClientRects().length > 0,
+    );
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     if (!first || !last) {
