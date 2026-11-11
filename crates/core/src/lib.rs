@@ -16,8 +16,8 @@ pub use library::{
     LyricRecord, LyricsSource, OriginalLyrics, normalize_text,
 };
 pub use lrclib::{
-    DURATION_TOLERANCE_SECONDS, HttpLyricsClient, LRCLIB_BASE_URL, LookupOutcome, LookupQuery,
-    LrclibTrack, LyricsClient, LyricsError, LyricsLookup, MISS_TTL_SECONDS, TrackQuery,
+    DURATION_TOLERANCE_SECONDS, LookupOutcome, LookupQuery, LrclibTrack, LyricsClient, LyricsError,
+    LyricsLookup, MISS_TTL_SECONDS, TrackQuery,
 };
 pub use lyrics::{
     LrcDocument, LyricLine, format_timestamp, is_music_marker, parse_lrc, parse_timestamp, to_lrc,

@@ -75,6 +75,7 @@ Acceptance:
 - [ ] Play/pause, relative seek, absolute seek, and unsupported-action errors.
 - [ ] Position polling and UI interpolation contract.
 - [ ] Discard late lookup results when the track changed while the lookup was running.
+- [ ] Add a short failure cooldown so an outage does not cause a request on every poll.
 - [ ] Provider tests with fakes; real-player checks documented separately.
 
 ## Phase 5 — HTTP API

@@ -1,6 +1,7 @@
 //! Local HTTP server and static asset host for Nico Karaoke.
 
 pub mod api;
+pub mod lrclib_http;
 
 use std::path::PathBuf;
 use std::sync::Arc;

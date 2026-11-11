@@ -702,7 +702,6 @@ dependencies = [
  "directories",
  "hex",
  "regex",
- "reqwest",
  "serde",
  "serde_json",
  "sha2",
@@ -721,10 +720,12 @@ name = "nico-karaoke-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "http-body-util",
  "nico-karaoke-core",
  "nico-karaoke-platform",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",

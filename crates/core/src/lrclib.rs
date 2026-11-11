@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -10,7 +9,6 @@ use crate::library::{LIBRARY_VERSION, LyricRecord, LyricsSource, OriginalLyrics,
 use crate::lyrics::parse_lrc;
 use crate::title::{record_key, split_title};
 
-pub const LRCLIB_BASE_URL: &str = "https://lrclib.net/api";
 pub const MISS_TTL_SECONDS: f64 = 3600.0;
 pub const DURATION_TOLERANCE_SECONDS: f64 = 5.0;
 
@@ -101,7 +99,7 @@ impl LookupQuery {
         }
     }
 
-    fn params(&self) -> Vec<(&'static str, String)> {
+    pub fn query_pairs(&self) -> Vec<(&'static str, String)> {
         let mut params = vec![
             ("track_name", self.title.clone()),
             ("artist_name", self.artist.clone()),
@@ -208,12 +206,10 @@ impl LyricsLookup {
             return Ok(LookupOutcome::Missing { fetched_at: now });
         };
 
-        if !self.begin_lookup(&key) {
+        let Some(_guard) = self.begin_lookup(&key) else {
             return Ok(LookupOutcome::Pending);
-        }
-        let result = self.lookup_query(&key, &base, track, now).await;
-        self.end_lookup(&key);
-        result
+        };
+        self.lookup_query(&key, &base, track, now).await
     }
 
     async fn lookup_query(
@@ -224,63 +220,62 @@ impl LyricsLookup {
         now: f64,
     ) -> Result<LookupOutcome, LyricsError> {
         let without_album = base.without_album();
+        let duration = track
+            .duration
+            .filter(|value| value.is_finite() && *value > 0.0);
 
         let mut exact = Vec::new();
         let mut searched = Vec::new();
         let mut seen = HashSet::new();
         let mut errors = Vec::new();
-        let mut successes = 0;
 
         if !base.album.is_empty() {
             match self.client.get(base).await {
-                Ok(items) => {
-                    successes += 1;
-                    add_candidates(&mut exact, items, &mut seen);
-                }
+                Ok(items) => add_candidates(&mut exact, items, &mut seen),
                 Err(error) => errors.push(error),
             }
         }
 
-        match self.client.get(&without_album).await {
-            Ok(items) => {
-                successes += 1;
-                add_candidates(&mut exact, items, &mut seen);
+        // An exact album match with synced lyrics is already the best possible result.
+        if !exact.iter().any(LrclibTrack::has_synced) {
+            match self.client.get(&without_album).await {
+                Ok(items) => add_candidates(&mut exact, items, &mut seen),
+                Err(error) => errors.push(error),
             }
-            Err(error) => errors.push(error),
         }
 
         if !exact.iter().any(LrclibTrack::has_synced) {
             match self.client.search(&without_album).await {
-                Ok(items) => {
-                    successes += 1;
-                    add_candidates(&mut searched, items, &mut seen);
-                }
+                Ok(items) => add_candidates(&mut searched, items, &mut seen),
                 Err(error) => errors.push(error),
             }
         }
 
-        if let Some(item) = select(&exact, &searched, track.duration) {
+        if let Some(item) = select(&exact, &searched, duration) {
             return Ok(LookupOutcome::Found(Box::new(record_from(
                 item, track, now,
             ))));
         }
 
-        // Do not turn a temporary network failure into an hour-long miss.
-        if successes == 0 {
-            if let Some(error) = errors.into_iter().next() {
-                return Err(error);
-            }
+        // A partial or total network failure must not become an hour-long miss.
+        if let Some(error) = errors.into_iter().next() {
+            return Err(error);
         }
 
         self.remember_miss(key.to_owned(), now);
         Ok(LookupOutcome::Missing { fetched_at: now })
     }
 
-    fn begin_lookup(&self, key: &str) -> bool {
-        self.in_flight
+    fn begin_lookup<'a>(&'a self, key: &str) -> Option<InFlightGuard<'a>> {
+        let inserted = self
+            .in_flight
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(key.to_owned())
+            .insert(key.to_owned());
+        inserted.then(|| InFlightGuard {
+            lookup: self,
+            key: key.to_owned(),
+        })
     }
 
     fn end_lookup(&self, key: &str) {
@@ -296,6 +291,7 @@ impl LyricsLookup {
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         match misses.get(key).copied() {
+            Some(fetched_at) if now < fetched_at => None,
             Some(fetched_at) if now - fetched_at <= self.miss_ttl_seconds => Some(fetched_at),
             Some(_) => {
                 misses.remove(key);
@@ -310,6 +306,18 @@ impl LyricsLookup {
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(key, now);
+    }
+}
+
+/// Removes the in-flight marker even when the lookup future is cancelled or dropped.
+struct InFlightGuard<'a> {
+    lookup: &'a LyricsLookup,
+    key: String,
+}
+
+impl Drop for InFlightGuard<'_> {
+    fn drop(&mut self) {
+        self.lookup.end_lookup(&self.key);
     }
 }
 
@@ -426,100 +434,6 @@ fn record_from(item: &LrclibTrack, track: &TrackQuery, now: f64) -> LyricRecord 
     }
 }
 
-pub struct HttpLyricsClient {
-    base: String,
-    http: reqwest::Client,
-}
-
-impl HttpLyricsClient {
-    pub fn new() -> Result<Self, LyricsError> {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .user_agent(format!(
-                "nico-karaoke/{} (local, personal use)",
-                env!("CARGO_PKG_VERSION")
-            ))
-            .build()
-            .map_err(|error| LyricsError::Request(error.to_string()))?;
-        Ok(Self::with_client(LRCLIB_BASE_URL, http))
-    }
-
-    pub fn with_client(base: impl Into<String>, http: reqwest::Client) -> Self {
-        Self {
-            base: base.into().trim_end_matches('/').to_owned(),
-            http,
-        }
-    }
-
-    async fn request(
-        &self,
-        endpoint: &str,
-        query: &LookupQuery,
-    ) -> Result<reqwest::Response, LyricsError> {
-        self.http
-            .get(format!("{}/{endpoint}", self.base))
-            .query(&query.params())
-            .send()
-            .await
-            .map_err(|error| LyricsError::Request(error.to_string()))
-    }
-}
-
-#[async_trait]
-impl LyricsClient for HttpLyricsClient {
-    async fn get(&self, query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
-        let response = self.request("get", query).await?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| LyricsError::Request(error.to_string()))?;
-        parse_get_json(status, &body)
-    }
-
-    async fn search(&self, query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
-        let response = self.request("search", query).await?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| LyricsError::Request(error.to_string()))?;
-        parse_search_json(status, &body)
-    }
-}
-
-fn parse_get_json(
-    status: reqwest::StatusCode,
-    body: &str,
-) -> Result<Vec<LrclibTrack>, LyricsError> {
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(Vec::new());
-    }
-    if !status.is_success() {
-        return Err(LyricsError::Request(format!(
-            "LRCLIB get returned HTTP {status}"
-        )));
-    }
-    let track: LrclibTrack =
-        serde_json::from_str(body).map_err(|error| LyricsError::Decode(error.to_string()))?;
-    Ok(vec![track])
-}
-
-fn parse_search_json(
-    status: reqwest::StatusCode,
-    body: &str,
-) -> Result<Vec<LrclibTrack>, LyricsError> {
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(Vec::new());
-    }
-    if !status.is_success() {
-        return Err(LyricsError::Request(format!(
-            "LRCLIB search returned HTTP {status}"
-        )));
-    }
-    serde_json::from_str(body).map_err(|error| LyricsError::Decode(error.to_string()))
-}
-
 fn unix_now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -587,11 +501,13 @@ mod tests {
         started: tokio::sync::Notify,
         release: tokio::sync::Notify,
         blocked_once: std::sync::atomic::AtomicBool,
+        calls: std::sync::atomic::AtomicUsize,
     }
 
     #[async_trait]
     impl LyricsClient for BlockingClient {
         async fn get(&self, _query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if !self
                 .blocked_once
                 .swap(true, std::sync::atomic::Ordering::SeqCst)
@@ -756,6 +672,7 @@ mod tests {
             started: tokio::sync::Notify::new(),
             release: tokio::sync::Notify::new(),
             blocked_once: std::sync::atomic::AtomicBool::new(false),
+            calls: std::sync::atomic::AtomicUsize::new(0),
         });
         let lookup = Arc::new(LyricsLookup::new(client.clone()));
 
@@ -774,6 +691,35 @@ mod tests {
         client.release.notify_one();
         let first = first.await.expect("task joins").expect("first lookup");
         assert_eq!(first, LookupOutcome::Missing { fetched_at: 1000.0 });
+    }
+
+    #[tokio::test]
+    async fn cancelled_lookup_releases_the_in_flight_guard() {
+        let client = Arc::new(BlockingClient {
+            started: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+            blocked_once: std::sync::atomic::AtomicBool::new(false),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let lookup = Arc::new(LyricsLookup::new(client.clone()));
+
+        let task = tokio::spawn({
+            let lookup = lookup.clone();
+            async move { lookup.lookup_at(&track_query(180.0), 1000.0).await }
+        });
+        client.started.notified().await;
+        task.abort();
+        let _ = task.await;
+
+        let outcome = lookup
+            .lookup_at(&track_query(180.0), 2000.0)
+            .await
+            .expect("retry works");
+        assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 2000.0 });
+        assert!(
+            client.calls.load(std::sync::atomic::Ordering::SeqCst) >= 2,
+            "the retry must reach the client"
+        );
     }
 
     #[tokio::test]
@@ -852,51 +798,6 @@ mod tests {
         let queries = client.get_queries.lock().expect("get queries");
         assert_eq!(queries[0].title, "Clean Song");
         assert_eq!(queries[1].duration, Some(180));
-    }
-
-    #[test]
-    fn parses_get_and_search_payloads() {
-        let get_body = r#"{
-            "id": 12,
-            "trackName": "Song",
-            "artistName": "Artist",
-            "albumName": "Album",
-            "duration": 180.0,
-            "plainLyrics": "Plain",
-            "syncedLyrics": "[00:01.00]Synced"
-        }"#;
-        let tracks = parse_get_json(reqwest::StatusCode::OK, get_body).expect("get parses");
-        assert_eq!(tracks.len(), 1);
-        assert!(tracks[0].has_synced());
-
-        let search_body = r#"[{"id": 1, "trackName": "Song"}]"#;
-        let tracks =
-            parse_search_json(reqwest::StatusCode::OK, search_body).expect("search parses");
-        assert_eq!(tracks.len(), 1);
-        assert_eq!(tracks[0].track_name, "Song");
-        assert!(!tracks[0].usable());
-    }
-
-    #[test]
-    fn treats_404_as_an_empty_result_and_other_errors_as_failures() {
-        assert!(
-            parse_get_json(reqwest::StatusCode::NOT_FOUND, "")
-                .expect("404 is empty")
-                .is_empty()
-        );
-        assert!(
-            parse_search_json(reqwest::StatusCode::NOT_FOUND, "")
-                .expect("404 is empty")
-                .is_empty()
-        );
-        assert!(matches!(
-            parse_get_json(reqwest::StatusCode::INTERNAL_SERVER_ERROR, ""),
-            Err(LyricsError::Request(_))
-        ));
-        assert!(matches!(
-            parse_search_json(reqwest::StatusCode::OK, "not json"),
-            Err(LyricsError::Decode(_))
-        ));
     }
 
     #[test]
