@@ -15,10 +15,14 @@ pub const LOG_BACKUPS: usize = 3;
 pub fn rotate_if_needed(path: &Path, max_bytes: u64, backups: usize) -> io::Result<bool> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            prune_stale_backups(path, backups)?;
+            return Ok(false);
+        }
         Err(error) => return Err(error),
     };
     if !metadata.is_file() || metadata.len() < max_bytes {
+        prune_stale_backups(path, backups)?;
         return Ok(false);
     }
 
@@ -111,6 +115,18 @@ mod tests {
             fs::read(backup_path(&log, 3)).expect("backup three"),
             b"two"
         );
+    }
+
+    #[test]
+    fn a_small_log_still_prunes_stale_backups() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let log = temp.path().join("app.log");
+        fs::write(&log, b"small").expect("write log");
+        fs::write(backup_path(&log, 4), b"stale").expect("write stale");
+
+        assert!(!rotate_if_needed(&log, 10, 3).expect("small file is fine"));
+        assert_eq!(fs::read(&log).expect("log exists"), b"small");
+        assert!(!backup_path(&log, 4).exists());
     }
 
     #[test]

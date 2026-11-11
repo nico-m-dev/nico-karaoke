@@ -32,7 +32,7 @@ the MSVC linker, so CI runs it on `windows-latest`.
 - Every response, including errors and static files, carries `no-store` plus these headers:
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
   `Cross-Origin-Opener-Policy: same-origin`, and a self-only content security policy.
-- The CSP allows inline styles because the player and timeline position elements with CSS
+- The CSP allows inline styles because the player and timeline position elements are positioned with CSS
   custom properties. A Chromium load of the player and Studio reported no CSP violations.
 - The app never binds to a public interface by default and never sends telemetry.
 
