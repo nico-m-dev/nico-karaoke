@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 1 complete. Phase 2 is next.
+Status: Phase 2 complete. Phase 3 is next.
 
 ## Phase 1 — Foundation
 
@@ -35,16 +35,25 @@ Acceptance:
 
 ## Phase 2 — Domain and storage
 
-- [ ] LRC parser and writer, including `♪` markers and legacy `[end:]` reading.
-- [ ] Timestamp formatting and parsing tests.
-- [ ] Track title cleaning and normalisation.
-- [ ] Stable record keys and slugged filenames.
-- [ ] Versioned `.lrc` + `.json` library store with atomic writes.
-- [ ] Manual `.lrc` precedence and metadata-only save rules.
-- [ ] Original LRCLIB text preservation.
-- [ ] Library listing, search support, delete, and stale-file cleanup.
-- [ ] Data-directory and log-file handling.
-- [ ] Storage tests with temporary directories.
+- [x] LRC parser and writer, including `♪` markers and legacy `[end:]` reading.
+- [x] Timestamp formatting and parsing tests.
+- [x] Track title cleaning and normalisation.
+- [x] Stable record keys and slugged filenames.
+- [x] Versioned `.lrc` + `.json` library store with atomic writes.
+- [x] Manual `.lrc` precedence and metadata-only save rules.
+- [x] Original LRCLIB text preservation.
+- [x] Library listing, search support, delete, and stale-file cleanup.
+- [x] Data-directory and log-file handling.
+- [x] Storage tests with temporary directories.
+
+Acceptance:
+
+- [x] `cargo test --workspace --locked` passes.
+- [x] A metadata-only save keeps a newer hand-edited `.lrc`.
+- [x] An explicit new text save overrides a hand-edited `.lrc`.
+- [x] Reopening the library preserves text, source, offset, original, and sync state.
+- [x] The server creates `nico-karaoke.log` in the data directory.
+- [x] No temporary files, build output, or local data are committed.
 
 ## Phase 3 — LRCLIB lookup
 

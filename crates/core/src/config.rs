@@ -95,6 +95,14 @@ impl AppConfig {
     pub fn bind_addr(&self) -> SocketAddr {
         SocketAddr::new(self.host, self.port)
     }
+
+    pub fn library_dir(&self) -> PathBuf {
+        self.data_dir.join(crate::library::LIBRARY_DIR_NAME)
+    }
+
+    pub fn log_file(&self) -> PathBuf {
+        self.data_dir.join(crate::library::LOG_FILE_NAME)
+    }
 }
 
 fn parse_host(value: &str) -> Result<IpAddr, ConfigError> {
@@ -150,6 +158,14 @@ mod tests {
         assert_eq!(config.port, DEFAULT_PORT);
         assert_eq!(config.launch, LaunchMode::Auto);
         assert_eq!(config.bind_addr().to_string(), "127.0.0.1:8770");
+        assert_eq!(
+            config.library_dir(),
+            PathBuf::from("test-data").join("library")
+        );
+        assert_eq!(
+            config.log_file(),
+            PathBuf::from("test-data").join("nico-karaoke.log")
+        );
     }
 
     #[test]

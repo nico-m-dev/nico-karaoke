@@ -4,18 +4,22 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, LaunchMode, USAGE};
+use nico_karaoke_core::{
+    APP_NAME, APP_VERSION, AppConfig, ConfigError, LOG_FILE_NAME, LaunchMode, USAGE,
+};
 use nico_karaoke_server::{AppState, app};
 use tokio::net::TcpListener;
-use tracing_subscriber::EnvFilter;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer, fmt};
 
 const PORT_ATTEMPTS: u16 = 20;
 const WEB_DIR_ENV: &str = "NICO_KARAOKE_WEB";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_tracing();
-
     let mut config = match AppConfig::from_env() {
         Ok(config) => config,
         Err(ConfigError::Help) => {
@@ -28,6 +32,8 @@ async fn main() -> Result<()> {
         }
         Err(error) => return Err(error).context("failed to read configuration"),
     };
+    let _log_guard = init_tracing(&config.data_dir);
+
     let (listener, port) = bind_listener(config.host, config.port)
         .await
         .context("failed to bind the local server")?;
@@ -92,11 +98,37 @@ async fn bind_listener(host: IpAddr, port: u16) -> Result<(TcpListener, u16)> {
     )
 }
 
-fn init_tracing() {
+fn init_tracing(data_dir: &std::path::Path) -> Option<WorkerGuard> {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("nico_karaoke_server=info,tower_http=warn"));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
+
+    if let Err(error) = std::fs::create_dir_all(data_dir) {
+        eprintln!(
+            "warning: cannot create data directory {}: {error}",
+            data_dir.display()
+        );
+        fmt().with_env_filter(filter).with_target(false).init();
+        return None;
+    }
+
+    let file_appender = tracing_appender::rolling::never(data_dir, LOG_FILE_NAME);
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(
+            fmt::layer()
+                .with_target(false)
+                .with_writer(std::io::stderr)
+                .with_filter(filter),
+        )
+        .with(
+            fmt::layer()
+                .with_target(false)
+                .with_ansi(false)
+                .with_writer(file_writer)
+                .with_filter(LevelFilter::INFO),
+        )
         .init();
+
+    Some(guard)
 }

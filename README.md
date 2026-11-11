@@ -69,6 +69,20 @@ Command-line options:
 | `-h`, `--help` | show usage |
 | `-V`, `--version` | show the version |
 
+## Data
+
+The app stores its library in the platform data directory, under `library/`. Each song has
+two files:
+
+- a human-readable `.lrc` file with the working lyrics;
+- a `.json` file with metadata, source, offset, timestamps, and the preserved original.
+
+A manual `.lrc` edit wins over the JSON copy. Metadata-only updates keep that manual text.
+Files are written atomically. The legacy Python library is not read or migrated.
+
+The data directory also contains `nico-karaoke.log` for windowless builds. Use
+`NICO_KARAOKE_DATA` to point the app at another directory.
+
 ## Checks
 
 ```bash
