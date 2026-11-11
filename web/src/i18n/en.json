@@ -1,0 +1,11 @@
+{
+  "app.title": "Nico Karaoke",
+  "app.tagline": "Lyrics that follow what you play.",
+  "status.checking": "Checking the local server…",
+  "status.ok": "Local server is ready.",
+  "status.error": "Cannot reach the local server. Is it running?",
+  "status.version": "Version {version} · {platform}",
+  "language.label": "Language",
+  "language.en": "English",
+  "language.nl": "Nederlands"
+}

@@ -68,17 +68,17 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - The player view stays deliberately quiet: playback, library, edit, fullscreen. Editing
   belongs in the Studio.
 
-## Data compatibility
+## Data format
 
-- Preserve the existing library format while the rewrite is young: one human-readable
-  `.lrc` file plus one `.json` metadata file per song.
+- Use a clean, versioned, file-based library: one human-readable `.lrc` file plus one
+  `.json` metadata file per song. There is no requirement to read the old Python library
+  or its legacy cache.
 - A manual `.lrc` edit wins over the JSON copy. Metadata-only updates must not overwrite
   newer manual text.
 - Keep the saved original LRCLIB text separate from the working text.
-- Support a one-time import of the legacy `lyrics.json` cache, then rename it so it is not
-  imported twice.
-- Do not silently change the on-disk schema. Any migration needs a documented version bump,
-  a backup path, and tests.
+- Version the JSON schema from the first release. A future schema change needs a documented
+  version bump, a backup path, and tests.
+- Write files atomically and serialise library writes.
 - Use the platform data directory; allow an environment-variable override for development
   and tests.
 
@@ -97,7 +97,7 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Run `cargo fmt` and `cargo clippy -- -D warnings` before finishing Rust work.
 - Run `tsc --noEmit`, the formatter, and the linter before finishing TypeScript work.
 - Tests must cover LRC parsing, title cleaning, the LRCLIB lookup ladder, library
-  persistence and migration, API validation, and translation key parity.
+  persistence and schema versioning, API validation, and translation key parity.
 - Unit tests must not depend on a real player, D-Bus, SMTC, or the network.
 - Avoid `unwrap()`/`expect()` on runtime input, filesystem, network, or platform calls.
   Return structured errors or log and degrade gracefully.

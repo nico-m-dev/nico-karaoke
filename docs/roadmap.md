@@ -151,23 +151,25 @@ Nico Karaoke is a local lyrics follower, not a media player:
 - **[Next]** Word-level editing mode for a single selected line.
 - **[Later]** Import/export enhanced LRC.
 
-### F. Persistence and migration
+### F. Persistence and storage
 
-- **[MVP]** Keep one human-readable `.lrc` file and one `.json` metadata file per song.
+- **[MVP]** Use a clean, versioned, file-based library: one human-readable `.lrc` file and
+  one `.json` metadata file per song.
 - **[MVP]** Treat the `.lrc` file as the source of truth after a manual edit.
 - **[MVP]** Do not let an offset-only or metadata-only save overwrite newer manual text.
 - **[MVP]** Write files atomically through a temporary file and rename.
+- **[MVP]** Serialise library writes so concurrent saves cannot interleave.
 - **[MVP]** Derive a stable record key from normalised artist and title.
 - **[MVP]** Use readable slugged file names with a short key suffix.
 - **[MVP]** Store `version`, `key`, metadata, `source`, `synced`, `offset`, timestamps,
   `lrclib_id`, and the original text.
-- **[MVP]** Import the legacy `lyrics.json` cache once, then rename it to prevent a second
-  import.
 - **[MVP]** Store data in the platform data directory, with an environment override.
 - **[MVP]** Write a log file in the data directory for windowless builds.
 - **[MVP]** Remove stale files when a record's slug changes.
 - **[Next]** Back up before any future schema migration.
 - **[Later]** Optional portable library directory.
+- **[Later]** Optional importer for a Python-era library, only if someone actually needs it.
+  It is explicitly not part of the rewrite.
 
 ### G. Localisation and accessibility
 
@@ -242,7 +244,8 @@ These are not user features; they are reasons for the rewrite and constraints on
   domain boundaries.
 - **[MVP]** Make media, lyrics lookup, storage, and HTTP independently testable.
 - **[MVP]** Keep the web UI but move it to strict TypeScript with a build step.
-- **[MVP]** Keep the existing library files usable; do not force users to retime their songs.
+- **[MVP]** Use readable, versioned files instead of a database; no migration from the
+  Python library is required.
 - **[MVP]** Make platform differences explicit through traits and conditional compilation,
   not runtime string checks scattered through the code.
 - **[MVP]** Keep the app runnable as a plain local web app before Tauri exists.
@@ -298,29 +301,37 @@ These come from the previous roadmap and remain valid, but are not part of the M
 - A cloud account or sync service.
 - Automatic public publishing of lyrics.
 - Telemetry or analytics.
+- Backwards compatibility with the Python app's library or cache.
 - A plugin system before the core rewrite is stable.
 
-## Open decisions before implementation
+## Decisions
 
-These need a yes/no before scaffolding starts:
+Confirmed on 2026-11-11:
 
 1. **Rust web stack:** Axum + Tokio + Serde + Reqwest.
-2. **Frontend:** Vite + strict TypeScript, no UI framework for the player; consider a small
-   framework only for the Studio if plain TypeScript becomes unwieldy.
+2. **Frontend:** Vite + strict TypeScript, no UI framework for the player or the Studio
+   initially. Revisit a framework only if plain TypeScript becomes unwieldy.
 3. **Repository layout:** Cargo workspace with domain, platform, and server crates, plus a
-   `web/` package. Tauri added later as a separate shell crate.
-4. **Compatibility:** keep the existing `.lrc` + `.json` library format and add a one-time
-   legacy import, rather than inventing a new database.
+   `web/` package. Tauri is added later as a separate shell crate.
+4. **Storage:** clean, versioned `.lrc` + `.json` files. The old Python library may be
+   discarded; no migration layer is required.
 5. **First milestone:** browser-first local server with the full player, library, and Studio
    flows; Tauri packaging after that works.
 6. **Licence:** MIT, inherited from the original project.
+
+Still open, but not blocking the foundation:
+
+- Whether the Studio gets a small component framework after the plain TypeScript version is
+  measured.
+- Whether release builds are plain binaries first or start with the Tauri shell.
+- Whether an optional Python-library importer is ever worth building.
 
 ## Suggested first phases
 
 Detailed checklists belong in `docs/TASKS.md`. The intended order is:
 
 1. **Foundation** — workspace, TypeScript build, config, logging, CI skeleton, test harness.
-2. **Domain and storage** — LRC parser, title cleaning, keys, library format, migration.
+2. **Domain and storage** — LRC parser, title cleaning, keys, versioned library format.
 3. **Lyrics lookup** — LRCLIB client, lookup ladder, cache, mocks.
 4. **Media providers** — shared trait, fake provider, Linux MPRIS, Windows SMTC.
 5. **HTTP API** — state, library, control, lyrics, Studio endpoints, security.

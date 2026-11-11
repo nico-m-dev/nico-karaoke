@@ -1,0 +1,11 @@
+{
+  "app.title": "Nico Karaoke",
+  "app.tagline": "Songtekst die meeschuift met wat je speelt.",
+  "status.checking": "Lokale server wordt gecontroleerd…",
+  "status.ok": "De lokale server is klaar.",
+  "status.error": "Geen verbinding met de lokale server. Draait hij?",
+  "status.version": "Versie {version} · {platform}",
+  "language.label": "Taal",
+  "language.en": "Engels",
+  "language.nl": "Nederlands"
+}

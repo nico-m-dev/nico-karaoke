@@ -1,0 +1,74 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use http_body_util::BodyExt;
+use nico_karaoke_core::{AppConfig, LaunchMode};
+use nico_karaoke_server::{AppState, app};
+use serde_json::Value;
+use tower::ServiceExt;
+
+fn test_state() -> AppState {
+    AppState {
+        config: Arc::new(AppConfig {
+            host: std::net::Ipv4Addr::LOCALHOST.into(),
+            port: 8770,
+            data_dir: PathBuf::from("test-data"),
+            launch: LaunchMode::NoOpen,
+        }),
+        web_dir: Arc::new(PathBuf::from("web/dist")),
+    }
+}
+
+#[tokio::test]
+async fn health_returns_ok_json() {
+    let response = app(test_state())
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("health body should be JSON");
+
+    assert_eq!(payload["status"], "ok");
+    assert_eq!(payload["name"], "Nico Karaoke");
+    assert!(payload["version"].is_string());
+    assert!(payload["platform"].is_string());
+    assert!(payload["supported"].is_boolean());
+}
+
+#[tokio::test]
+async fn unknown_api_route_returns_json_404() {
+    let response = app(test_state())
+        .oneshot(
+            Request::builder()
+                .uri("/api/does-not-exist")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error body should be JSON");
+
+    assert_eq!(payload["error"], "not_found");
+}
