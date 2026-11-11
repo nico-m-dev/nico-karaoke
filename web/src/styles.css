@@ -22,11 +22,17 @@ body {
   margin: 0;
   background:
     radial-gradient(circle at 15% 0%, rgba(98, 227, 140, 0.1), transparent 32rem),
-    radial-gradient(circle at 90% 20%, rgba(70, 130, 180, 0.08), transparent 28rem),
-    var(--bg);
+    radial-gradient(circle at 90% 20%, rgba(70, 130, 180, 0.08), transparent 28rem), var(--bg);
   color: var(--text);
   font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
   line-height: 1.5;
 }
 

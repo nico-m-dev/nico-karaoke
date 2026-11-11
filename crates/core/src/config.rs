@@ -9,6 +9,15 @@ pub const APP_NAME: &str = "Nico Karaoke";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_PORT: u16 = 8770;
 pub const DATA_DIR_ENV: &str = "NICO_KARAOKE_DATA";
+pub const USAGE: &str = "Usage: nico-karaoke-server [options]
+
+Options:
+  --host <ip>     Address to bind (default 127.0.0.1; localhost is accepted)
+  --port <port>   First port to try (default 8770)
+  --browser       Force the default browser (wired in a later phase)
+  --no-open       Start the server without opening anything
+  -h, --help      Show this help
+  -V, --version   Show the version";
 
 /// How the app should open after the local server starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +44,15 @@ impl AppConfig {
         let data_dir = env::var_os(DATA_DIR_ENV)
             .map(PathBuf::from)
             .unwrap_or(default_data_dir()?);
-        Self::from_args(env::args().skip(1), data_dir)
+        let args = env::args_os()
+            .skip(1)
+            .map(|argument| {
+                argument
+                    .into_string()
+                    .map_err(|_| ConfigError::NonUnicodeArgument)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::from_args(args, data_dir)
     }
 
     /// Parse arguments against explicit defaults. Keeping the data directory out of the
@@ -53,7 +70,7 @@ impl AppConfig {
             match argument.as_str() {
                 "--host" => {
                     let value = args.next().ok_or(ConfigError::MissingValue("--host"))?;
-                    host = value.parse().map_err(|_| ConfigError::InvalidHost(value))?;
+                    host = parse_host(&value)?;
                 }
                 "--port" => {
                     let value = args.next().ok_or(ConfigError::MissingValue("--port"))?;
@@ -61,6 +78,8 @@ impl AppConfig {
                 }
                 "--browser" => launch = LaunchMode::Browser,
                 "--no-open" => launch = LaunchMode::NoOpen,
+                "-h" | "--help" => return Err(ConfigError::Help),
+                "-V" | "--version" => return Err(ConfigError::Version),
                 other => return Err(ConfigError::UnknownArgument(other.to_owned())),
             }
         }
@@ -76,6 +95,15 @@ impl AppConfig {
     pub fn bind_addr(&self) -> SocketAddr {
         SocketAddr::new(self.host, self.port)
     }
+}
+
+fn parse_host(value: &str) -> Result<IpAddr, ConfigError> {
+    if value.eq_ignore_ascii_case("localhost") {
+        return Ok(IpAddr::V4(Ipv4Addr::LOCALHOST));
+    }
+    value
+        .parse()
+        .map_err(|_| ConfigError::InvalidHost(value.to_owned()))
 }
 
 /// Platform-specific local data directory, resolved by the `directories` crate.
@@ -95,6 +123,12 @@ pub enum ConfigError {
     InvalidPort(String),
     #[error("unknown argument: {0}")]
     UnknownArgument(String),
+    #[error("argument is not valid UTF-8")]
+    NonUnicodeArgument,
+    #[error("help requested")]
+    Help,
+    #[error("version requested")]
+    Version,
     #[error("could not determine a local data directory")]
     NoDataDir,
 }
@@ -139,6 +173,25 @@ mod tests {
         let no_open = AppConfig::from_args(args(&["--no-open"]), PathBuf::from("test-data"))
             .expect("no-open mode should parse");
         assert_eq!(no_open.launch, LaunchMode::NoOpen);
+    }
+
+    #[test]
+    fn accepts_localhost_by_name() {
+        let config =
+            AppConfig::from_args(args(&["--host", "localhost"]), PathBuf::from("test-data"))
+                .expect("localhost should parse");
+        assert_eq!(config.host, IpAddr::V4(Ipv4Addr::LOCALHOST));
+    }
+
+    #[test]
+    fn reports_help_and_version_as_control_errors() {
+        let help = AppConfig::from_args(args(&["--help"]), PathBuf::from("test-data"))
+            .expect_err("help should stop parsing");
+        assert_eq!(help, ConfigError::Help);
+
+        let version = AppConfig::from_args(args(&["--version"]), PathBuf::from("test-data"))
+            .expect_err("version should stop parsing");
+        assert_eq!(version, ConfigError::Version);
     }
 
     #[test]

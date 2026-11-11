@@ -4,7 +4,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, LaunchMode};
+use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, LaunchMode, USAGE};
 use nico_karaoke_server::{AppState, app};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -16,7 +16,18 @@ const WEB_DIR_ENV: &str = "NICO_KARAOKE_WEB";
 async fn main() -> Result<()> {
     init_tracing();
 
-    let mut config = AppConfig::from_env().context("failed to read configuration")?;
+    let mut config = match AppConfig::from_env() {
+        Ok(config) => config,
+        Err(ConfigError::Help) => {
+            println!("{USAGE}");
+            return Ok(());
+        }
+        Err(ConfigError::Version) => {
+            println!("{APP_NAME} {APP_VERSION}");
+            return Ok(());
+        }
+        Err(error) => return Err(error).context("failed to read configuration"),
+    };
     let (listener, port) = bind_listener(config.host, config.port)
         .await
         .context("failed to bind the local server")?;
@@ -61,7 +72,13 @@ async fn bind_listener(host: IpAddr, port: u16) -> Result<(TcpListener, u16)> {
         let candidate = port.saturating_add(offset);
         let address = SocketAddr::new(host, candidate);
         match TcpListener::bind(address).await {
-            Ok(listener) => return Ok((listener, candidate)),
+            Ok(listener) => {
+                let bound_port = listener
+                    .local_addr()
+                    .context("failed to read the bound address")?
+                    .port();
+                return Ok((listener, bound_port));
+            }
             Err(error) if error.kind() == ErrorKind::AddrInUse => continue,
             Err(error) => {
                 return Err(error).with_context(|| format!("cannot bind {address}"));

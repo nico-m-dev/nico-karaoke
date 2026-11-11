@@ -2,35 +2,36 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 1 in progress.
+Status: Phase 1 complete. Phase 2 is next.
 
 ## Phase 1 — Foundation
 
 Goal: a running walking skeleton with the agreed workspace, a typed frontend build, a local
 health endpoint, basic logging, and CI. No media or lyrics behaviour yet.
 
-- [ ] Cargo workspace with `crates/core`, `crates/platform`, and `crates/server`.
-- [ ] Shared workspace metadata: edition, version, licence, common dependencies.
-- [ ] Core config: host, port, data directory, environment override, bind address.
-- [ ] Platform stub with target detection; no MPRIS/SMTC calls yet.
-- [ ] Axum server with `GET /api/health` and static file serving.
-- [ ] Bind to `127.0.0.1` by default; reject nothing yet beyond the bind address.
-- [ ] Logging to stdout with a configurable filter; file logging comes with storage.
-- [ ] Vite + strict TypeScript frontend with a minimal i18n setup (`en`, `nl`).
-- [ ] Frontend health check against the Rust server in development and production.
-- [ ] Unit tests: config parsing, health endpoint, i18n key parity.
-- [ ] `README.md` with English run instructions.
-- [ ] MIT licence file.
-- [ ] GitHub Actions skeleton: Rust fmt/clippy/test and frontend typecheck/test/build.
-- [ ] Subagent review of the foundation diff.
+- [x] Cargo workspace with `crates/core`, `crates/platform`, and `crates/server`.
+- [x] Shared workspace metadata: edition, version, licence, common dependencies.
+- [x] Core config: host, port, data directory, environment override, bind address.
+- [x] Platform stub with target detection; no MPRIS/SMTC calls yet.
+- [x] Axum server with `GET /api/health` and static file serving.
+- [x] Bind to `127.0.0.1` by default; reject nothing yet beyond the bind address.
+- [x] Logging to stdout with a configurable filter; file logging comes with storage.
+- [x] Vite + strict TypeScript frontend with a minimal i18n setup (`en`, `nl`).
+- [x] Frontend health check against the Rust server in development and production.
+- [x] Unit tests: config parsing, health endpoint, i18n key parity.
+- [x] `README.md` with English run instructions.
+- [x] MIT licence file.
+- [x] GitHub Actions skeleton: Rust fmt/clippy/test and frontend typecheck/lint/format/test/build.
+- [x] Subagent review of the foundation diff and fixes for its findings.
 
 Acceptance:
 
-- `cargo test` passes.
-- `cargo clippy -- -D warnings` passes.
-- `npm test` and `npm run build` pass in `web/`.
-- `cargo run -p nico-karaoke-server` serves the built frontend and a healthy API.
-- No absolute machine paths or local data in git.
+- [x] `cargo test --workspace --locked` passes.
+- [x] `cargo clippy --workspace --all-targets --locked -- -D warnings` passes.
+- [x] `npm test`, `npm run lint`, `npm run format:check`, and `npm run build` pass in `web/`.
+- [x] `cargo run -p nico-karaoke-server` serves the built frontend and a healthy API.
+- [x] No absolute machine paths or local data in git.
+- [x] `--port 0`, `--help`, `--version`, bare `/api`, and missing static paths behave correctly.
 
 ## Phase 2 — Domain and storage
 
@@ -99,7 +100,8 @@ Acceptance:
 
 ## Phase 8 — Studio UI
 
-- [ ] Studio route and loading by key or current track.
+- [ ] Studio route and loading by key or current track. The Studio is a server-rendered route
+  (`/editor`), not a client-side catch-all; unknown paths stay 404.
 - [ ] Header, dirty state, save, fetch, restore original, raw LRC.
 - [ ] Timeline with rulers, markers, playhead, zoom, fit, click-to-seek, drag-to-retime.
 - [ ] Line list with inline time/text editing, sorting, add line, add music, delete.
@@ -115,6 +117,7 @@ Acceptance:
 - [ ] Error states for no player, no position, no seek, no lyrics, and network failure.
 - [ ] Logging and log-file rotation policy.
 - [ ] Security review of static serving, Host/Origin, and body limits.
+- [ ] Review dev-tooling dependency advisories; runtime dependencies must stay clean.
 - [ ] Accessibility review.
 - [ ] Long-song and long-line performance check.
 - [ ] Linux and Windows manual player matrix.

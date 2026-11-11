@@ -10,14 +10,16 @@ does not record audio, download tracks, or play video.
 ## Status
 
 Foundation phase. The workspace, local server, typed frontend, and CI skeleton exist; media,
-lyrics, library, and Studio behaviour are next.
+lyrics, library, and Studio behaviour are next. Host/Origin validation and the full local-only
+HTTP policy are scheduled for the API phase; the server currently binds to `127.0.0.1` by
+default.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
 
 ## Requirements
 
 - Rust stable
-- Node.js 22 or newer
+- Node.js 22.12 or newer (LTS recommended)
 - On Linux, a running media player that publishes MPRIS metadata (later phases)
 - On Windows, an application that publishes SMTC metadata (later phases)
 
@@ -33,6 +35,9 @@ cargo run -p nico-karaoke-server
 
 Open <http://127.0.0.1:8770/>. The server tries the next free port when `8770` is busy.
 
+The default frontend directory is `web/dist` relative to the current working directory. Run
+the server from the repository root, or set `NICO_KARAOKE_WEB` to an absolute or relative path.
+
 For frontend development, run the Vite server and the Rust server side by side:
 
 ```bash
@@ -41,6 +46,9 @@ npm run dev --prefix web
 ```
 
 Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
+
+TypeScript is pinned to the 6.0.x line because `typescript-eslint` currently supports
+TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7.
 
 ## Configuration
 
@@ -54,18 +62,22 @@ Command-line options:
 
 | Option | Meaning |
 | --- | --- |
-| `--host <addr>` | address to bind (default `127.0.0.1`) |
-| `--port <port>` | first port to try (default `8770`) |
+| `--host <addr>` | address to bind: an IP literal or `localhost` (default `127.0.0.1`) |
+| `--port <port>` | first port to try (default `8770`; `0` picks a free port) |
 | `--browser` | force browser launching (wired in a later phase) |
 | `--no-open` | start the server without opening anything |
+| `-h`, `--help` | show usage |
+| `-V`, `--version` | show the version |
 
 ## Checks
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 npm run typecheck --prefix web
+npm run lint --prefix web
+npm run format:check --prefix web
 npm test --prefix web
 npm run build --prefix web
 ```

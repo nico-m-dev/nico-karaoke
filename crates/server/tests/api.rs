@@ -72,3 +72,51 @@ async fn unknown_api_route_returns_json_404() {
 
     assert_eq!(payload["error"], "not_found");
 }
+
+#[tokio::test]
+async fn bare_api_route_returns_json_404() {
+    let response = app(test_state())
+        .oneshot(
+            Request::builder()
+                .uri("/api")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error body should be JSON");
+
+    assert_eq!(payload["error"], "not_found");
+}
+
+#[tokio::test]
+async fn missing_static_file_returns_404() {
+    // The app is multi-page: the Studio will be a real server route, not a client-side
+    // catch-all. Unknown static paths should therefore not fall back to index.html.
+    let response = app(test_state())
+        .oneshot(
+            Request::builder()
+                .uri("/missing.js")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    assert!(!body.starts_with(b"<!doctype html>"));
+}

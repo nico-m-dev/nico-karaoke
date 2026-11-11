@@ -112,8 +112,9 @@ Nico Karaoke is a local lyrics follower, not a media player:
 
 ### E. Studio editor
 
-- **[MVP]** Dedicated Studio page per song, opened by library key or by the currently playing
-  track.
+- **[MVP]** Dedicated Studio page per song at the server route `/editor`, opened by library
+  key or by the currently playing track. It is a real page, not a client-side catch-all;
+  unknown paths stay 404.
 - **[MVP]** Header with back link, title, artist, source, original availability, play/pause,
   current time, duration, save button, and dirty indicator.
 - **[MVP]** Horizontal, zoomable timeline with time ruler, one marker per line, and a moving

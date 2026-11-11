@@ -1,12 +1,8 @@
 import "./styles.css";
-import {
-  applyTranslations,
-  detectLanguage,
-  rememberLanguage,
-  t,
-  type Language,
-} from "./i18n";
+import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
 
+// Keep this shape in sync with `HealthResponse` in `crates/server/src/api.rs` until shared
+// API types are generated.
 type Health = {
   status: "ok";
   name: string;

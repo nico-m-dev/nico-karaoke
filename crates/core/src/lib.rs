@@ -6,4 +6,4 @@
 
 pub mod config;
 
-pub use config::{APP_NAME, APP_VERSION, AppConfig, ConfigError, DEFAULT_PORT, LaunchMode};
+pub use config::{APP_NAME, APP_VERSION, AppConfig, ConfigError, DEFAULT_PORT, LaunchMode, USAGE};

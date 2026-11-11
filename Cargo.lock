@@ -334,7 +334,6 @@ name = "nico-karaoke-core"
 version = "0.1.0"
 dependencies = [
  "directories",
- "serde",
  "thiserror",
 ]
 
@@ -687,7 +686,6 @@ dependencies = [
  "tokio-util",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
