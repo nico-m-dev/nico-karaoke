@@ -22,6 +22,7 @@ use crate::watcher::{NewLibraryItem, WatcherError};
 
 pub const MAX_BODY: usize = 256_000;
 const MAX_LYRICS: usize = 120_000;
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 type ApiError = (StatusCode, Json<ErrorDto>);
 
@@ -454,6 +455,35 @@ pub async fn local_only(State(state): State<AppState>, request: Request, next: N
 
 pub async fn no_store(request: Request, next: Next) -> Response {
     no_store_response(next.run(request).await)
+}
+
+/// Browser-side hardening for the local app. The CSP keeps the page self-contained: no remote
+/// scripts, styles, fonts, or connections. Inline styles stay allowed because the player and
+/// timeline position elements through CSS custom properties.
+pub async fn security_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(CONTENT_SECURITY_POLICY),
+    );
+    headers.insert(
+        header::HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("cross-origin-opener-policy"),
+        HeaderValue::from_static("same-origin"),
+    );
+    response
 }
 
 fn no_store_response(mut response: Response) -> Response {

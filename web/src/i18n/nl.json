@@ -145,5 +145,6 @@
   "studio.fetching": "Ophalen…",
   "studio.playback": "Afspelen",
   "studio.line_count_one": "1 regel",
-  "studio.notice.track_changed": "De track is gewijzigd. Dit document hoort bij de vorige track; herlaad de Studio om de nieuwe te bewerken."
+  "studio.notice.track_changed": "De track is gewijzigd. Dit document hoort bij de vorige track; herlaad de Studio om de nieuwe te bewerken.",
+  "player.offline_short": "Server offline"
 }

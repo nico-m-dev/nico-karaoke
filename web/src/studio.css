@@ -408,6 +408,12 @@ body.studio-body {
   outline: none;
 }
 
+.line-time:focus-visible,
+.line-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .line-time[aria-invalid="true"] {
   border-color: var(--danger);
 }

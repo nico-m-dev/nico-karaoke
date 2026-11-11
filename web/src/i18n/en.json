@@ -145,5 +145,6 @@
   "studio.fetching": "Fetching…",
   "studio.playback": "Playback",
   "studio.line_count_one": "1 line",
-  "studio.notice.track_changed": "The track changed. This document belongs to the previous track; reload the Studio to edit the new one."
+  "studio.notice.track_changed": "The track changed. This document belongs to the previous track; reload the Studio to edit the new one.",
+  "player.offline_short": "Server offline"
 }

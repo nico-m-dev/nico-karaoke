@@ -97,6 +97,15 @@ export function formatTime(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** Player clock text. A missing position is explicit instead of pretending to be at zero. */
+export function formatClock(position: number | null, length: number | null): string {
+  const elapsed = position === null ? "—" : formatTime(position);
+  if (typeof length === "number" && Number.isFinite(length) && length > 0) {
+    return `${elapsed} / ${formatTime(length)}`;
+  }
+  return elapsed;
+}
+
 /** Position to aim for on the next poll, including time elapsed since the sample. */
 export function targetPosition(track: TrackTiming): number | null {
   if (track.position === null || !Number.isFinite(track.position)) {

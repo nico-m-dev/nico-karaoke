@@ -9,9 +9,11 @@ does not record audio, download tracks, or play video.
 
 ## Status
 
-Development phase. The workspace, local server, typed frontend, media providers, lyrics
-lookup, library, watcher, local API, player UI, library browser, and Studio editor are
-implemented. The server binds to `127.0.0.1` by default and validates `Host`/`Origin`.
+The workspace, local server, typed frontend, media providers, lyrics lookup, library,
+watcher, local API, player UI, library browser, and Studio editor are implemented and
+hardened. The server binds to `127.0.0.1` by default, validates `Host`/`Origin`, and sends
+browser hardening headers. Packaging is the next phase and starts after the owner's local
+acceptance run.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
 
@@ -79,8 +81,9 @@ two files:
 A manual `.lrc` edit wins over the JSON copy. Metadata-only updates keep that manual text.
 Files are written atomically. The legacy Python library is not read or migrated.
 
-The data directory also contains `nico-karaoke.log` for windowless builds. Use
-`NICO_KARAOKE_DATA` to point the app at another directory.
+The data directory also contains `nico-karaoke.log` for windowless builds. At startup a file
+of 5 MiB or more is rotated to `.1`; three backups are kept. Use `NICO_KARAOKE_DATA` to point
+the app at another directory.
 
 ## Lyrics lookup
 
@@ -162,7 +165,10 @@ explicit save.
 ## Local API
 
 The local HTTP API returns JSON and never caches responses. It is only reachable from this
-machine and rejects foreign `Host`/`Origin` headers.
+machine and rejects foreign `Host`/`Origin` headers. API writes require JSON and a bounded
+body. Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, and a self-only
+content security policy. Static serving rejects path traversal.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -193,12 +199,18 @@ identifies the library file. `item_key` in lookup requests is a library key.
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
+cargo check -p nico-karaoke-platform --all-targets --target x86_64-pc-windows-msvc
 npm run typecheck --prefix web
 npm run lint --prefix web
 npm run format:check --prefix web
 npm test --prefix web
 npm run build --prefix web
+npm audit --omit=dev --prefix web
 ```
+
+See `docs/testing.md` for the manual player matrix, accessibility notes, and the long-song
+measurements. Runtime dependencies have no npm advisories; the ESLint toolchain pins a fixed
+`minimatch` through a package override.
 
 ## Repository layout
 

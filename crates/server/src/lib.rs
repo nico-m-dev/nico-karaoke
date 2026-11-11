@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod dto;
+pub mod logging;
 pub mod lrclib_http;
 pub mod watcher;
 
@@ -58,5 +59,6 @@ pub fn app(state: AppState) -> Router {
             state.clone(),
             api::local_only,
         ))
+        .layer(middleware::from_fn(api::security_headers))
         .with_state(state)
 }

@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 8 complete. Phase 9 is next.
+Status: Phase 9 complete on Linux. The Windows SMTC run and packaging wait for the owner.
 
 ## Phase 1 — Foundation
 
@@ -179,13 +179,44 @@ Acceptance:
 
 ## Phase 9 — Hardening
 
-- [ ] Error states for no player, no position, no seek, no lyrics, and network failure.
-- [ ] Logging and log-file rotation policy.
-- [ ] Security review of static serving, Host/Origin, and body limits.
-- [ ] Review dev-tooling dependency advisories; runtime dependencies must stay clean.
-- [ ] Accessibility review.
-- [ ] Long-song and long-line performance check.
-- [ ] Linux and Windows manual player matrix.
+- [x] Error states for no player, no position, no seek, no lyrics, and network failure.
+- [x] Logging and log-file rotation policy.
+- [x] Security review of static serving, Host/Origin, and body limits.
+- [x] Review dev-tooling dependency advisories; runtime dependencies must stay clean.
+- [x] Accessibility review.
+- [x] Long-song and long-line performance check.
+- [x] Linux MPRIS matrix with a real player.
+- [ ] Windows SMTC matrix on a real Windows machine. The crate compiles; the runtime path is
+  untested and this stays open for packaging.
+
+Acceptance:
+
+- [x] A player without a position shows `—` instead of `0:00`; the player keeps working in
+  plain-text mode.
+- [x] A server outage shows a persistent "Server offline" badge and a one-time toast, and the
+  badge clears when the server returns. The Studio reports the outage once without dropping
+  edits.
+- [x] No player, no lyrics, missing lyrics, unavailable lyrics, unsupported seek, and network
+  errors have readable states or messages.
+- [x] The log rotates at 5 MiB to `.1`, keeps three backups, and starts a fresh file; unit
+  tests cover the shift and the backup cap.
+- [x] Security headers and a self-only CSP are present on API responses, static files, and
+  rejected requests. Chromium reported no CSP violations while loading the player, library,
+  and Studio.
+- [x] Encoded and plain path traversal attempts are rejected; oversized bodies, wrong
+  content types, invalid JSON, and foreign `Host`/`Origin` values return stable error codes.
+- [x] `npm audit` reports zero advisories after pinning the fixed `minimatch`; runtime
+  dependencies stay clean.
+- [x] Metadata contrast, large-text contrast for inactive lyric lines, heading levels, focus
+  visibility, labels, live regions, dialog focus traps, inert tap mode, and reduced motion
+  were reviewed.
+- [x] A three-hour, 2000-line track renders in the player and Studio without horizontal
+  overflow; a 1505-character line wraps. Measurements are recorded in `docs/testing.md`.
+- [x] A real `mpv` 0.41 session with `mpv-mpris` was discovered, and play, pause, absolute
+  seek, position, and duration worked. Two fake MPRIS players covered selection and
+  fallback.
+- [x] `cargo fmt`, clippy, the full Rust suite, the Windows platform check, and web
+  typecheck/lint/format/test/build pass.
 
 ## Phase 10 — Packaging
 
@@ -196,6 +227,7 @@ Before packaging starts, the owner runs the app in development and confirms it i
 
 Then:
 
+- [ ] Run the SMTC acceptance matrix on a real Windows machine before a Windows release.
 - [ ] Embedded frontend assets in the release binary.
 - [ ] Linux and Windows release builds in CI.
 - [ ] Icon, version metadata, and no console window on Windows.

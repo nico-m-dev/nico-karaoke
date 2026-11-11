@@ -10,7 +10,7 @@ use nico_karaoke_core::{
     LyricsError, LyricsLookup,
 };
 use nico_karaoke_server::watcher::Watcher;
-use nico_karaoke_server::{AppState, app};
+use nico_karaoke_server::{AppState, api, app};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -151,6 +151,139 @@ async fn missing_static_file_returns_404() {
         .expect("body should be readable")
         .to_bytes();
     assert!(!body.starts_with(b"<!doctype html>"));
+}
+
+#[tokio::test]
+async fn security_headers_are_set_on_api_and_rejections() {
+    let (state, _temp) = test_state();
+    for uri in ["/api/health", "/api/does-not-exist"] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get("x-content-type-options")
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert_eq!(
+            headers.get("x-frame-options").and_then(|v| v.to_str().ok()),
+            Some("DENY")
+        );
+        assert_eq!(
+            headers.get("referrer-policy").and_then(|v| v.to_str().ok()),
+            Some("no-referrer")
+        );
+        assert_eq!(
+            headers
+                .get("cross-origin-opener-policy")
+                .and_then(|v| v.to_str().ok()),
+            Some("same-origin")
+        );
+        let csp = headers
+            .get("content-security-policy")
+            .and_then(|v| v.to_str().ok())
+            .expect("CSP is set");
+        assert!(csp.contains("default-src 'self'"));
+        assert!(csp.contains("frame-ancestors 'none'"));
+    }
+
+    // Foreign requests are rejected by the outermost local-only middleware; hardening
+    // headers must still be present.
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .header("host", "evil.example")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        response
+            .headers()
+            .get("x-content-type-options")
+            .and_then(|v| v.to_str().ok()),
+        Some("nosniff")
+    );
+}
+
+#[tokio::test]
+async fn static_serving_blocks_path_traversal() {
+    let (mut state, _temp) = test_state();
+    let root = tempfile::tempdir().expect("web root");
+    let web = root.path().join("web");
+    std::fs::create_dir(&web).expect("web directory");
+    std::fs::write(web.join("index.html"), "<!doctype html>ok").expect("index");
+    std::fs::write(root.path().join("secret.txt"), "TOP SECRET").expect("secret");
+    state.web_dir = Arc::new(web);
+
+    for uri in [
+        "/%2e%2e/secret.txt",
+        "/..%2fsecret.txt",
+        "/../../secret.txt",
+    ] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+
+        assert!(
+            response.status() != StatusCode::OK,
+            "{uri} must not be served"
+        );
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should be readable")
+            .to_bytes();
+        assert!(!body.starts_with(b"TOP SECRET"));
+    }
+}
+
+#[tokio::test]
+async fn oversized_json_body_is_rejected_with_a_code() {
+    let (state, _temp) = test_state();
+    let text = "a".repeat(api::MAX_BODY);
+    let body = serde_json::json!({ "text": text }).to_string();
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/lyrics/parse")
+                .header("host", "127.0.0.1")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("error body should be JSON");
+    assert_eq!(payload["error"], "payload_too_large");
 }
 
 #[tokio::test]

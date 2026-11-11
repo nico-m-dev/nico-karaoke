@@ -6,7 +6,7 @@
   --panel-border: #25352c;
   --text: #eef5f0;
   --muted: #8fa298;
-  --dim: #53645b;
+  --dim: #758a80;
   --accent: #64e38e;
   --accent-soft: rgba(100, 227, 142, 0.14);
   --danger: #ff8c7a;
@@ -56,9 +56,22 @@ button {
 }
 
 button:focus-visible,
-select:focus-visible {
+select:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+.offline {
+  padding: 0.18rem 0.45rem;
+  border: 1px solid rgba(255, 140, 122, 0.5);
+  border-radius: 999px;
+  color: var(--danger);
+  font-size: 0.68rem;
+  white-space: nowrap;
 }
 
 .sr-only {
@@ -113,7 +126,8 @@ select:focus-visible {
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.22;
-  opacity: 0.52;
+  opacity: 0.62;
+  overflow-wrap: anywhere;
   text-align: center;
   transition:
     opacity 220ms ease,
@@ -141,7 +155,8 @@ select:focus-visible {
 }
 
 .line.past {
-  opacity: 0.26;
+  color: var(--dim);
+  opacity: 0.72;
 }
 
 .line.instrumental {
@@ -719,7 +734,10 @@ body[data-state="playing"] .idle {
   .line,
   .bar,
   .toast,
-  .library-card {
+  .library-card,
+  .library-item,
+  .line-row,
+  .tap-button {
     animation: none !important;
     transition: none !important;
   }

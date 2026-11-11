@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findActiveLine,
   fillProgress,
+  formatClock,
   formatTime,
   isMusicLine,
   lineEnd,
@@ -18,6 +19,18 @@ const lines: LyricLine[] = [
   { t: 5, text: "♪" },
   { t: 7, text: "Third" },
 ];
+
+describe("formatClock", () => {
+  it("shows an explicit dash when the player has no position", () => {
+    expect(formatClock(null, 180)).toBe("— / 3:00");
+    expect(formatClock(null, null)).toBe("—");
+  });
+
+  it("shows elapsed and total when both are known", () => {
+    expect(formatClock(83.9, 180)).toBe("1:23 / 3:00");
+    expect(formatClock(10, null)).toBe("0:10");
+  });
+});
 
 describe("findActiveLine", () => {
   it("returns -1 before the first line", () => {

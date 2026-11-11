@@ -154,6 +154,7 @@ let editSnapshot: EditorSnapshot | null = null;
 let anchor: Anchor | null = null;
 let anchorTrack = "";
 let pollBusy = false;
+let pollOffline = false;
 let previewTimer: number | null = null;
 let previewing = false;
 let toastTimer: number | undefined;
@@ -1334,6 +1335,7 @@ async function poll(): Promise<void> {
   pollBusy = true;
   try {
     await refreshNow();
+    pollOffline = false;
     if (
       !key &&
       !fatalMessage &&
@@ -1345,6 +1347,10 @@ async function poll(): Promise<void> {
       await loadItem(now.lyrics.record_key);
     }
   } catch {
+    if (!pollOffline) {
+      pollOffline = true;
+      showToast(t(language, "player.offline"));
+    }
     // Keep the last known state; the next poll may recover.
   } finally {
     pollBusy = false;

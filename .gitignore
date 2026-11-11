@@ -13,6 +13,7 @@ node_modules/
 
 # Local runtime data and logs
 *.log
+*.log.*
 /data/
 /local-data/
 .env

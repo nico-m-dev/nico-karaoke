@@ -22,6 +22,7 @@ import { errorMessage, sourceLabelKey } from "./messages";
 import {
   fillProgress,
   findActiveLine,
+  formatClock,
   formatTime,
   isMusicLine,
   positionAt,
@@ -55,9 +56,10 @@ app.innerHTML = `
     <header class="bar top" id="topbar">
       <span class="dot" aria-hidden="true"></span>
       <div class="titles">
-        <span class="song-title" id="song-title"></span>
+        <span class="song-title" id="song-title" role="heading" aria-level="1"></span>
         <span class="song-artist" id="song-artist"></span>
       </div>
+      <span class="offline" id="offline" role="status" data-i18n="player.offline_short" hidden></span>
       <label class="player-pick">
         <span class="sr-only" data-i18n="player.players.aria"></span>
         <select id="players" hidden></select>
@@ -137,6 +139,7 @@ const els = {
   libraryDetail: query<HTMLElement>("#library-detail"),
   libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
   libraryClose: query<HTMLButtonElement>("#library-close"),
+  offline: query<HTMLElement>("#offline"),
   toast: query<HTMLElement>("#toast"),
 };
 
@@ -229,6 +232,7 @@ function updateLanguageButtons(): void {
 }
 
 function updateTrackTexts(track: Track | null): void {
+  els.songTitle.setAttribute("aria-level", track ? "1" : "2");
   if (!track) {
     els.songTitle.textContent = t(language, "app.title");
     els.songArtist.textContent = t(language, "player.waiting");
@@ -276,12 +280,7 @@ function updatePlayButton(track: Track | null): void {
 }
 
 function updateTime(position: number | null): void {
-  const length = data.track?.length;
-  const value = position ?? 0;
-  const text =
-    typeof length === "number" && Number.isFinite(length) && length > 0
-      ? `${formatTime(value)} / ${formatTime(length)}`
-      : formatTime(value);
+  const text = formatClock(position, data.track?.length ?? null);
   if (text !== lastTimeText) {
     lastTimeText = text;
     els.time.textContent = text;
@@ -517,6 +516,10 @@ function applyNow(next: Now): void {
   }
 }
 
+function setOffline(value: boolean): void {
+  els.offline.hidden = !value;
+}
+
 function goIdle(next: Now): void {
   clearTimeout(idleTimer);
   clearTimeout(chromeTimer);
@@ -559,8 +562,10 @@ async function poll(): Promise<void> {
   try {
     const next = await getNow();
     offlineShown = false;
+    setOffline(false);
     applyNow(next);
   } catch (error) {
+    setOffline(true);
     if (!offlineShown) {
       offlineShown = true;
       showToast(t(language, "player.offline"));

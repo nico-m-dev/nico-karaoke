@@ -9,6 +9,7 @@ use nico_karaoke_core::{
     APP_NAME, APP_VERSION, AppConfig, ConfigError, LOG_FILE_NAME, LaunchMode, Library,
     LyricsLookup, USAGE,
 };
+use nico_karaoke_server::logging::{LOG_BACKUPS, MAX_LOG_BYTES, rotate_if_needed};
 use nico_karaoke_server::lrclib_http::HttpLyricsClient;
 use nico_karaoke_server::watcher::Watcher;
 use nico_karaoke_server::{AppState, app};
@@ -123,6 +124,11 @@ fn init_tracing(data_dir: &std::path::Path) -> Option<WorkerGuard> {
         eprintln!("warning: cannot create the data directory: {error}");
         fmt().with_env_filter(filter).with_target(false).init();
         return None;
+    }
+
+    if let Err(error) = rotate_if_needed(&data_dir.join(LOG_FILE_NAME), MAX_LOG_BYTES, LOG_BACKUPS)
+    {
+        eprintln!("warning: cannot rotate the log file: {error}");
     }
 
     let file_appender = match tracing_appender::rolling::Builder::new()
