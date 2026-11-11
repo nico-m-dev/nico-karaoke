@@ -52,7 +52,7 @@
   "player.error.media_unavailable": "The media source is unavailable.",
   "player.error.invalid_value": "That value is not valid.",
   "player.error.lyrics_too_long": "That text is too long.",
-  "player.error.library_error": "The library could not be updated.",
+  "player.error.library_error": "The library could not be loaded or updated.",
   "player.error.lyrics_empty": "The text is empty.",
   "player.error.no_original": "No original is kept for this item.",
   "player.error.invalid_key": "That library key is not valid.",

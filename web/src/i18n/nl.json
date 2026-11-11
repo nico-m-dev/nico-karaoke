@@ -52,7 +52,7 @@
   "player.error.media_unavailable": "De mediabron is niet beschikbaar.",
   "player.error.invalid_value": "Die waarde is ongeldig.",
   "player.error.lyrics_too_long": "Die tekst is te lang.",
-  "player.error.library_error": "De bibliotheek kon niet worden bijgewerkt.",
+  "player.error.library_error": "De bibliotheek kon niet worden geladen of bijgewerkt.",
   "player.error.lyrics_empty": "De tekst is leeg.",
   "player.error.no_original": "Voor dit item is geen origineel bewaard.",
   "player.error.invalid_key": "Die bibliotheeksleutel is ongeldig.",

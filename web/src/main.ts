@@ -993,6 +993,11 @@ function detailDirty(): boolean {
   return Boolean(textarea && textIsDirty(textarea.value, detailItem.lyrics.text));
 }
 
+function setDetailBusy(busy: boolean): void {
+  detailBusy = busy;
+  els.libraryDetail.classList.toggle("busy", busy);
+}
+
 async function backToLibrary(): Promise<void> {
   if (detailBusy) {
     return;
@@ -1024,7 +1029,7 @@ async function saveDetail(): Promise<void> {
     showToast(t(language, "player.error.lyrics_too_long"));
     return;
   }
-  detailBusy = true;
+  setDetailBusy(true);
   try {
     const updated = await saveLibraryItem(key, text);
     if (selectedKey !== key) {
@@ -1040,7 +1045,7 @@ async function saveDetail(): Promise<void> {
   } catch (error) {
     showToast(errorMessage(error));
   } finally {
-    detailBusy = false;
+    setDetailBusy(false);
   }
 }
 
@@ -1049,13 +1054,13 @@ async function restoreDetail(): Promise<void> {
     return;
   }
   const key = selectedKey;
-  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
-    return;
-  }
   if (!window.confirm(t(language, "player.library.restore_confirm"))) {
     return;
   }
-  detailBusy = true;
+  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
+    return;
+  }
+  setDetailBusy(true);
   try {
     const updated = await restoreLibraryOriginal(key);
     if (selectedKey !== key) {
@@ -1071,7 +1076,7 @@ async function restoreDetail(): Promise<void> {
   } catch (error) {
     showToast(errorMessage(error));
   } finally {
-    detailBusy = false;
+    setDetailBusy(false);
   }
 }
 
@@ -1084,7 +1089,7 @@ async function deleteDetail(): Promise<void> {
   if (!window.confirm(t(language, "player.library.delete_confirm", { title }))) {
     return;
   }
-  detailBusy = true;
+  setDetailBusy(true);
   try {
     await deleteLibraryItem(key);
     if (selectedKey === key) {
@@ -1102,7 +1107,7 @@ async function deleteDetail(): Promise<void> {
   } catch (error) {
     showToast(errorMessage(error));
   } finally {
-    detailBusy = false;
+    setDetailBusy(false);
   }
 }
 

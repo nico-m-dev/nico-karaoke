@@ -628,6 +628,12 @@ body[data-state="playing"] .idle {
   resize: vertical;
 }
 
+.library-detail.busy .detail-actions,
+.library-detail.busy .detail-text {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 .library-empty {
   margin-top: 1rem;
 }
