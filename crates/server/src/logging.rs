@@ -37,8 +37,37 @@ pub fn rotate_if_needed(path: &Path, max_bytes: u64, backups: usize) -> io::Resu
         }
         fs::rename(source, target)?;
     }
+    prune_stale_backups(path, backups)?;
 
     Ok(true)
+}
+
+/// Remove numbered backups beyond the retention limit, including files left by an older
+/// policy. Only `<name>.<digits>` files are touched.
+fn prune_stale_backups(path: &Path, backups: usize) -> io::Result<()> {
+    let (Some(parent), Some(name)) = (
+        path.parent(),
+        path.file_name().and_then(|value| value.to_str()),
+    ) else {
+        return Ok(());
+    };
+    let prefix = format!("{name}.");
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(suffix) = file_name.strip_prefix(&prefix) else {
+            continue;
+        };
+        if suffix.chars().all(|character| character.is_ascii_digit())
+            && suffix.parse::<usize>().is_ok_and(|index| index > backups)
+        {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }
 
 fn backup_path(path: &Path, index: usize) -> PathBuf {

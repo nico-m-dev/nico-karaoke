@@ -219,6 +219,49 @@ async fn security_headers_are_set_on_api_and_rejections() {
 }
 
 #[tokio::test]
+async fn static_routes_carry_security_headers() {
+    let (mut state, _temp) = test_state();
+    let web = tempfile::tempdir().expect("web directory");
+    std::fs::write(web.path().join("index.html"), "<!doctype html>ok").expect("index");
+    std::fs::write(web.path().join("editor.html"), "<!doctype html>studio").expect("editor");
+    state.web_dir = Arc::new(web.path().to_path_buf());
+
+    for (uri, expected) in [
+        ("/", StatusCode::OK),
+        ("/editor", StatusCode::OK),
+        ("/missing.js", StatusCode::NOT_FOUND),
+    ] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .header("host", "127.0.0.1")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+
+        assert_eq!(response.status(), expected, "{uri}");
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get("x-content-type-options")
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff"),
+            "{uri}"
+        );
+        assert!(
+            headers
+                .get("content-security-policy")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|value| value.contains("script-src 'self'")),
+            "{uri} must carry the CSP"
+        );
+    }
+}
+
+#[tokio::test]
 async fn static_serving_blocks_path_traversal() {
     let (mut state, _temp) = test_state();
     let root = tempfile::tempdir().expect("web root");

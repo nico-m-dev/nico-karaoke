@@ -533,8 +533,7 @@ function goIdle(next: Now): void {
   document.body.dataset.state = "idle";
   document.body.dataset.playing = "false";
   els.controls.hidden = true;
-  els.songTitle.textContent = t(language, "app.title");
-  els.songArtist.textContent = t(language, "player.waiting");
+  updateTrackTexts(null);
   els.track.replaceChildren();
   els.track.style.transform = "none";
   renderPlayers(next.players, null);

@@ -32,7 +32,7 @@ the MSVC linker, so CI runs it on `windows-latest`.
 - Every response, including errors and static files, carries `no-store` plus these headers:
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
   `Cross-Origin-Opener-Policy: same-origin`, and a self-only content security policy.
-- The CSP allows inline styles because the player and timeline position elements through CSS
+- The CSP allows inline styles because the player and timeline position elements with CSS
   custom properties. A Chromium load of the player and Studio reported no CSP violations.
 - The app never binds to a public interface by default and never sends telemetry.
 
@@ -44,7 +44,7 @@ policy: a single very long session can grow past the limit until the next start.
 
 ## Dependencies
 
-`npm audit --omit=dev` reports no runtime advisories. The ESLint toolchain pulled a
+`npm audit` reports no advisories, including development tooling. The ESLint toolchain pulled a
 `minimatch` version affected by a denial-of-service advisory; `web/package.json` pins the
 fixed `minimatch` through an `overrides` entry. Revisit that override when ESLint and
 `typescript-eslint` update their dependencies.
@@ -71,7 +71,7 @@ three-hour track:
 
 - Player with 2000 lines: first render about 0.6 s, 6,056 DOM nodes, about 53 frames in one
   second.
-- Studio with 2000 lines: first render about 2.0 s, 24,583 DOM nodes including 2000 timeline
+- Studio with 2000 lines: first render about 2.0 s, 24,109 DOM nodes including 2000 timeline
   markers; scrolling the line list takes about 13 ms. Normal songs are far below this.
 - A 1505-character line wraps inside the player instead of creating horizontal page
   overflow. In the Studio the line stays inside its input and scrolls horizontally.

@@ -205,12 +205,12 @@ npm run lint --prefix web
 npm run format:check --prefix web
 npm test --prefix web
 npm run build --prefix web
-npm audit --omit=dev --prefix web
+npm audit --prefix web
 ```
 
 See `docs/testing.md` for the manual player matrix, accessibility notes, and the long-song
-measurements. Runtime dependencies have no npm advisories; the ESLint toolchain pins a fixed
-`minimatch` through a package override.
+measurements. Dependencies have no npm advisories; the ESLint toolchain pins a fixed `minimatch`
+through a package override.
 
 ## Repository layout
 

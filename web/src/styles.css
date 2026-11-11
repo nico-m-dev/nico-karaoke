@@ -10,7 +10,7 @@
   --accent: #64e38e;
   --accent-soft: rgba(100, 227, 142, 0.14);
   --danger: #ff8c7a;
-  --line-font: clamp(1.35rem, 3.2vw, 2.85rem);
+  --line-font: clamp(1.5rem, 3.2vw, 2.85rem);
   --line-pad: clamp(1.1rem, 7vw, 8rem);
 }
 
@@ -126,7 +126,7 @@ textarea:focus-visible {
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.22;
-  opacity: 0.62;
+  opacity: 0.66;
   overflow-wrap: anywhere;
   text-align: center;
   transition:
@@ -156,7 +156,7 @@ textarea:focus-visible {
 
 .line.past {
   color: var(--dim);
-  opacity: 0.72;
+  opacity: 0.75;
 }
 
 .line.instrumental {

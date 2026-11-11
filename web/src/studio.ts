@@ -1334,8 +1334,18 @@ async function poll(): Promise<void> {
   }
   pollBusy = true;
   try {
-    await refreshNow();
-    pollOffline = false;
+    try {
+      await refreshNow();
+      pollOffline = false;
+    } catch {
+      if (!pollOffline) {
+        pollOffline = true;
+        showToast(t(language, "player.offline"));
+      }
+      // Keep the last known state; the next poll may recover.
+      return;
+    }
+
     if (
       !key &&
       !fatalMessage &&
@@ -1344,14 +1354,12 @@ async function poll(): Promise<void> {
       lines.length === 0 &&
       !busy
     ) {
-      await loadItem(now.lyrics.record_key);
+      try {
+        await loadItem(now.lyrics.record_key);
+      } catch {
+        // A failed item load must not be reported as a server outage.
+      }
     }
-  } catch {
-    if (!pollOffline) {
-      pollOffline = true;
-      showToast(t(language, "player.offline"));
-    }
-    // Keep the last known state; the next poll may recover.
   } finally {
     pollBusy = false;
   }
@@ -1505,11 +1513,12 @@ function showNotice(message: string): void {
 
 function showToast(message: string): void {
   els.toast.textContent = message;
-  els.toast.hidden = false;
+  els.toast.classList.add("show");
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => {
-    els.toast.hidden = true;
-  }, 2600);
+    els.toast.classList.remove("show");
+    els.toast.textContent = "";
+  }, 3600);
 }
 
 void boot();
