@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 2 complete. Phase 3 is next.
+Status: Phase 3 complete. Phase 4 is next.
 
 ## Phase 1 — Foundation
 
@@ -57,14 +57,14 @@ Acceptance:
 
 ## Phase 3 — LRCLIB lookup
 
-- [ ] HTTP client behind a trait with a fake implementation for tests.
-- [ ] Title cleaning and the `get` → `get` → `search` ladder.
-- [ ] Synced-over-plain preference and duration proximity.
-- [ ] Candidate deduplication.
-- [ ] Found-lyrics cache and one-hour miss cache.
-- [ ] Concurrent lookup guard and stale-result guard.
-- [ ] Publish/flag left for later.
-- [ ] Tests with recorded fixture responses, never the live network.
+- [x] HTTP client behind a trait with a fake implementation for tests.
+- [x] Title cleaning and the `get` → `get` → `search` ladder.
+- [x] Synced-over-plain preference and duration proximity.
+- [x] Candidate deduplication.
+- [x] Found lyrics returned as library records; one-hour miss cache in the service.
+- [x] Concurrent lookup guard. The stale-result guard belongs to the watcher in Phase 4.
+- [x] Publish/flag explicitly out of scope for this phase.
+- [x] Tests with fixture responses, never the live network.
 
 ## Phase 4 — Media providers
 
@@ -74,6 +74,7 @@ Acceptance:
 - [ ] Player selection, fallback selection, and session identity.
 - [ ] Play/pause, relative seek, absolute seek, and unsupported-action errors.
 - [ ] Position polling and UI interpolation contract.
+- [ ] Discard late lookup results when the track changed while the lookup was running.
 - [ ] Provider tests with fakes; real-player checks documented separately.
 
 ## Phase 5 — HTTP API

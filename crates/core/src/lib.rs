@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod library;
+pub mod lrclib;
 pub mod lyrics;
 pub mod title;
 
@@ -13,6 +14,10 @@ pub use config::{APP_NAME, APP_VERSION, AppConfig, ConfigError, DEFAULT_PORT, La
 pub use library::{
     LIBRARY_DIR_NAME, LIBRARY_VERSION, LOG_FILE_NAME, Library, LibraryError, LibrarySummary,
     LyricRecord, LyricsSource, OriginalLyrics, normalize_text,
+};
+pub use lrclib::{
+    DURATION_TOLERANCE_SECONDS, HttpLyricsClient, LRCLIB_BASE_URL, LookupOutcome, LookupQuery,
+    LrclibTrack, LyricsClient, LyricsError, LyricsLookup, MISS_TTL_SECONDS, TrackQuery,
 };
 pub use lyrics::{
     LrcDocument, LyricLine, format_timestamp, is_music_marker, parse_lrc, parse_timestamp, to_lrc,

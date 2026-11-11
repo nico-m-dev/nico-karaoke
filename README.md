@@ -83,6 +83,13 @@ Files are written atomically. The legacy Python library is not read or migrated.
 The data directory also contains `nico-karaoke.log` for windowless builds. Use
 `NICO_KARAOKE_DATA` to point the app at another directory.
 
+## Lyrics lookup
+
+LRCLIB is queried without an API key. Titles and channel-style artist names are cleaned
+first. The lookup tries an exact match with the album, then without it, then searches within
+five seconds of the known duration. A synchronised result wins over plain text, and a miss is
+cached for one hour. A temporary network failure is not cached as a miss.
+
 ## Checks
 
 ```bash
