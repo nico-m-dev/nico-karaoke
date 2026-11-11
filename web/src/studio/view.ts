@@ -55,8 +55,8 @@ export function renderLines(
     text.addEventListener("blur", () => handlers.editEnd(line.id));
     text.addEventListener("input", () => handlers.setText(line.id, text.value));
 
-    const play = iconButton("▶", t(language, "studio.line_play", { index: index + 1 }));
-    play.addEventListener("click", (event) => {
+    const goTo = iconButton("→", t(language, "studio.line_go", { index: index + 1 }));
+    goTo.addEventListener("click", (event) => {
       event.stopPropagation();
       handlers.seek(line.id);
     });
@@ -68,7 +68,7 @@ export function renderLines(
       handlers.remove(line.id);
     });
 
-    row.append(number, time, text, play, remove);
+    row.append(number, time, text, goTo, remove);
     return row;
   });
 
@@ -229,7 +229,6 @@ export type InspectorHandlers = {
   preview: () => void;
   toggleMusic: () => void;
   remove: () => void;
-  tap: () => void;
 };
 
 const NUDGES = [-0.5, -0.1, -0.01, 0.01, 0.1, 0.5];
@@ -322,11 +321,6 @@ export function renderInspector(
 
     children.push(actions);
   }
-
-  const tap = ghostButton(t(state.language, "studio.inspector.tap"));
-  tap.classList.add("inspector-tap");
-  tap.addEventListener("click", handlers.tap);
-  children.push(tap);
 
   body.replaceChildren(...children);
 }

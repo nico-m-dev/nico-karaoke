@@ -7,12 +7,13 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::lyrics::{LyricLine, parse_lrc};
-use crate::title::slugify;
+use crate::title::{normalize, record_key, slugify, split_title};
 
 pub const LIBRARY_VERSION: u32 = 1;
 pub const LIBRARY_DIR_NAME: &str = "library";
 pub const LOG_FILE_NAME: &str = "nico-karaoke.log";
 const MAX_OFFSET_SECONDS: f64 = 10.0;
+const MATCH_DURATION_TOLERANCE_SECONDS: f64 = 10.0;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -227,6 +228,50 @@ impl Library {
 
     pub fn get(&self, key: &str) -> Option<LyricRecord> {
         self.read_state().records.get(key).cloned()
+    }
+
+    /// Find the record that belongs to a track snapshot. YouTube metadata can omit the
+    /// artist or add a channel/video decoration that the exact key cannot see, so fall back
+    /// to a normalised title match. Duration breaks ties between covers of the same title.
+    pub fn find_key(&self, title: &str, artist: &str, duration: Option<f64>) -> Option<String> {
+        let exact = record_key(title, artist);
+        let state = self.read_state();
+        if state.records.contains_key(&exact) {
+            return Some(exact);
+        }
+
+        let (target_title, target_artist) = split_title(title, artist);
+        let title_key = normalize(&target_title);
+        let artist_key = normalize(&target_artist);
+        if title_key.is_empty() {
+            return None;
+        }
+
+        let mut candidates: Vec<&LyricRecord> = state
+            .records
+            .values()
+            .filter(|record| {
+                let (record_title, record_artist) = split_title(&record.title, &record.artist);
+                normalize(&record_title) == title_key
+                    && (artist_key.is_empty() || normalize(&record_artist) == artist_key)
+            })
+            .collect();
+
+        if candidates.len() <= 1 {
+            return candidates.first().map(|record| record.key.clone());
+        }
+
+        let duration = duration.filter(|value| value.is_finite() && *value > 0.0)?;
+        candidates.retain(|record| {
+            record
+                .duration
+                .is_some_and(|value| (value - duration).abs() <= MATCH_DURATION_TOLERANCE_SECONDS)
+        });
+        if candidates.len() == 1 {
+            candidates.first().map(|record| record.key.clone())
+        } else {
+            None
+        }
     }
 
     pub fn summaries(&self) -> Vec<LibrarySummary> {
@@ -610,6 +655,61 @@ mod tests {
         assert_eq!(summaries[0].line_count, 2);
         assert!(summaries[0].has_original);
         assert!(!summaries[0].has_ends);
+    }
+
+    #[test]
+    fn finds_a_record_when_the_current_metadata_is_thinner() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("I Don't Want You In Here", "Solar Fake");
+        let mut item = record(
+            &key,
+            "I Don't Want You In Here",
+            "Solar Fake",
+            "[00:01.00]Line\n",
+        );
+        item.duration = Some(213.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(
+            library.find_key("I Don't Want You In Here", "Solar Fake", Some(213.0)),
+            Some(key.clone())
+        );
+        assert_eq!(
+            library.find_key("I Don't Want You In Here", "", Some(213.0)),
+            Some(key.clone())
+        );
+        assert_eq!(
+            library.find_key(
+                "Solar Fake - I Don't Want You In Here (Official Video Clip)",
+                "",
+                Some(213.0)
+            ),
+            Some(key)
+        );
+    }
+
+    #[test]
+    fn does_not_guess_between_same_title_covers_without_a_duration() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let first = record_key("Same Title", "Artist A");
+        let second = record_key("Same Title", "Artist B");
+        for (key, artist, duration) in [(&first, "Artist A", 200.0), (&second, "Artist B", 300.0)] {
+            let mut item = record(key, "Same Title", artist, "Line\n");
+            item.duration = Some(duration);
+            library.put(item).expect("record saves");
+        }
+
+        assert_eq!(library.find_key("Same Title", "", None), None);
+        assert_eq!(
+            library.find_key("Same Title", "", Some(201.0)),
+            Some(first.clone())
+        );
+        assert_eq!(
+            library.find_key("Same Title", "Artist B", None),
+            Some(second)
+        );
     }
 
     #[test]

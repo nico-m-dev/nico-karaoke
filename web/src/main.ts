@@ -6,8 +6,6 @@ import {
   getLibrary,
   getLibraryItem,
   getNow,
-  restoreLibraryOriginal,
-  saveLibraryItem,
   togglePlayback,
   type LibraryItemResponse,
   type LibraryResponse,
@@ -30,13 +28,7 @@ import {
   updateAnchor,
   type Anchor,
 } from "./player";
-import {
-  MAX_LYRICS_LENGTH,
-  matchesLibraryQuery,
-  spotifySearchUrl,
-  textIsDirty,
-  youtubeSearchUrl,
-} from "./library";
+import { matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) {
@@ -177,6 +169,7 @@ let idleTimer = 0;
 let chromeTimer = 0;
 let toastTimer = 0;
 let lastTimeText = "";
+let tickScheduled = false;
 let pollBusy = false;
 let controlBusy = false;
 let selectionBusy = false;
@@ -185,7 +178,6 @@ let libraryData: LibraryResponse | null = null;
 let libraryOpener: HTMLElement | null = null;
 let selectedKey: string | null = null;
 let detailItem: LibraryItemResponse | null = null;
-let detailEditing = false;
 let detailBusy = false;
 
 function trackKey(track: Track | null): string {
@@ -371,36 +363,45 @@ function livePosition(): number | null {
     : position;
 }
 
-function tick(): void {
+function ensureTick(): void {
+  if (tickScheduled) {
+    return;
+  }
+  tickScheduled = true;
   requestAnimationFrame(tick);
+}
+
+function tick(): void {
+  tickScheduled = false;
   const position = livePosition();
   if (position !== null) {
     updateTime(position);
   }
-  if (plainMode || !data.lyrics.synced || lines.length === 0) {
-    return;
+
+  if (!plainMode && data.lyrics.synced && lines.length > 0) {
+    const time = lyricTime();
+    if (time !== null) {
+      const index = findActiveLine(lines, time);
+      const line = index >= 0 ? lines[index] : null;
+      const done = Boolean(
+        line && typeof line.end === "number" && Number.isFinite(line.end) && time >= line.end,
+      );
+
+      if (index !== activeIndex || done !== activeDone) {
+        activeIndex = index;
+        activeDone = done;
+        markLines(index, done);
+        centerLine(index >= 0 ? index : 0);
+      }
+
+      if (index >= 0 && !done) {
+        setFill(index, fillProgress(lines, index, data.track?.length ?? null, time));
+      }
+    }
   }
 
-  const time = lyricTime();
-  if (time === null) {
-    return;
-  }
-
-  const index = findActiveLine(lines, time);
-  const line = index >= 0 ? lines[index] : null;
-  const done = Boolean(
-    line && typeof line.end === "number" && Number.isFinite(line.end) && time >= line.end,
-  );
-
-  if (index !== activeIndex || done !== activeDone) {
-    activeIndex = index;
-    activeDone = done;
-    markLines(index, done);
-    centerLine(index >= 0 ? index : 0);
-  }
-
-  if (index >= 0 && !done) {
-    setFill(index, fillProgress(lines, index, data.track?.length ?? null, time));
+  if (data.track?.playing && !document.hidden) {
+    ensureTick();
   }
 }
 
@@ -502,7 +503,7 @@ function applyNow(next: Now): void {
   updateTime(livePosition());
 
   if (trackKey(previous.track) !== trackKey(track) && !els.library.hidden) {
-    if (selectedKey && !detailEditing && !detailBusy) {
+    if (selectedKey && !detailBusy) {
       void openDetail(selectedKey);
     } else if (!selectedKey) {
       void loadLibrary();
@@ -513,6 +514,10 @@ function applyNow(next: Now): void {
   if (nextLyricsKey !== lyricsKey) {
     lyricsKey = nextLyricsKey;
     rebuildLyrics(next.lyrics);
+  }
+
+  if (track.playing) {
+    ensureTick();
   }
 }
 
@@ -644,7 +649,6 @@ async function openLibrary(): Promise<void> {
   libraryOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   selectedKey = null;
   detailItem = null;
-  detailEditing = false;
   els.librarySearch.value = "";
   clearTimeout(chromeTimer);
   els.library.hidden = false;
@@ -658,16 +662,10 @@ function closeLibrary(): void {
   if (els.library.hidden || detailBusy) {
     return;
   }
-  if (detailDirty()) {
-    if (!window.confirm(t(language, "player.library.discard_confirm"))) {
-      return;
-    }
-  }
   els.library.hidden = true;
   els.stage.inert = false;
   selectedKey = null;
   detailItem = null;
-  detailEditing = false;
   showChrome();
   const opener = libraryOpener;
   libraryOpener = null;
@@ -683,12 +681,6 @@ function showLibraryList(): void {
 async function refreshLibrary(): Promise<void> {
   if (detailBusy) {
     return;
-  }
-  if (detailDirty()) {
-    if (!window.confirm(t(language, "player.library.discard_confirm"))) {
-      return;
-    }
-    detailEditing = false;
   }
   await loadLibrary();
   if (selectedKey) {
@@ -789,7 +781,6 @@ async function openDetail(key: string): Promise<void> {
   }
   selectedKey = key;
   detailItem = null;
-  detailEditing = false;
   els.librarySearch.hidden = true;
   els.libraryList.hidden = true;
   els.libraryDetail.hidden = false;
@@ -815,9 +806,6 @@ function renderDetail(): void {
   }
   const item = detailItem;
   const lyrics = item.lyrics;
-  const editorText = detailEditing
-    ? (els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text")?.value ?? lyrics.text)
-    : lyrics.text;
   els.libraryDetail.replaceChildren();
   els.librarySearch.hidden = true;
   els.libraryList.hidden = true;
@@ -850,45 +838,28 @@ function renderDetail(): void {
     lyrics.duration ? formatTime(lyrics.duration) : "",
     formatDate(lyrics.updated_at),
     lyrics.offset ? t(language, "player.library.offset", { value: lyrics.offset }) : "",
+    lyrics.original ? t(language, "player.library.original_available") : "",
   ]
     .filter(Boolean)
     .join(" · ");
   els.libraryDetail.append(meta);
 
-  if (!detailEditing) {
-    const preview = document.createElement("pre");
-    preview.className = "detail-preview";
-    preview.textContent = lyrics.text;
-    els.libraryDetail.append(preview);
-  }
+  const preview = document.createElement("pre");
+  preview.className = "detail-preview";
+  preview.textContent = lyrics.text;
+  els.libraryDetail.append(preview);
 
   const actions = document.createElement("div");
   actions.className = "detail-actions";
-  if (!detailEditing) {
-    const studio = document.createElement("a");
-    studio.className = "ghost primary detail-link";
-    studio.href = `/editor?key=${encodeURIComponent(item.lyrics.record_key ?? selectedKey ?? "")}`;
-    studio.textContent = t(language, "player.library.studio");
-    actions.append(
-      studio,
-      actionButton(t(language, "player.library.edit"), () => {
-        detailEditing = true;
-        renderDetail();
-      }),
-    );
-  }
+  const studio = document.createElement("a");
+  studio.className = "ghost primary detail-link";
+  studio.href = `/editor?key=${encodeURIComponent(item.lyrics.record_key ?? selectedKey ?? "")}`;
+  studio.textContent = t(language, "player.library.studio");
   actions.append(
+    studio,
     externalLink(t(language, "library.youtube"), youtubeSearchUrl(lyrics.title, lyrics.artist)),
     externalLink(t(language, "library.spotify"), spotifySearchUrl(lyrics.title, lyrics.artist)),
   );
-
-  if (lyrics.original) {
-    actions.append(
-      actionButton(t(language, "player.library.restore"), () => {
-        void restoreDetail();
-      }),
-    );
-  }
 
   const remove = actionButton(t(language, "player.library.delete"), () => {
     void deleteDetail();
@@ -897,61 +868,7 @@ function renderDetail(): void {
   actions.append(remove);
   els.libraryDetail.append(actions);
 
-  if (detailEditing) {
-    renderEditor(item, editorText);
-  } else {
-    title.focus();
-  }
-}
-
-function renderEditor(item: LibraryItemResponse, text = item.lyrics.text): void {
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  hint.textContent = t(language, "player.library.raw_hint");
-
-  const textarea = document.createElement("textarea");
-  textarea.className = "detail-text";
-  textarea.id = "detail-text";
-  textarea.spellcheck = false;
-  textarea.rows = 12;
-  textarea.value = text;
-  textarea.setAttribute("aria-label", t(language, "player.library.editor_aria"));
-  textarea.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      void saveDetail();
-    }
-  });
-
-  const actions = document.createElement("div");
-  actions.className = "detail-actions";
-  actions.append(
-    actionButton(
-      t(language, "player.library.save"),
-      () => {
-        void saveDetail();
-      },
-      "primary",
-    ),
-    actionButton(t(language, "player.library.cancel"), () => {
-      if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
-        return;
-      }
-      detailEditing = false;
-      renderDetail();
-    }),
-  );
-
-  els.libraryDetail.append(hint, actions, textarea);
-  textarea.focus();
-}
-
-function detailDirty(): boolean {
-  if (!detailEditing || !detailItem) {
-    return false;
-  }
-  const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
-  return Boolean(textarea && textIsDirty(textarea.value, detailItem.lyrics.text));
+  title.focus();
 }
 
 function setDetailBusy(busy: boolean): void {
@@ -963,81 +880,11 @@ async function backToLibrary(): Promise<void> {
   if (detailBusy) {
     return;
   }
-  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
-    return;
-  }
   selectedKey = null;
   detailItem = null;
-  detailEditing = false;
   showLibraryList();
   if (libraryData) {
     renderLibrary(libraryData);
-  }
-}
-
-async function saveDetail(): Promise<void> {
-  if (!selectedKey || !detailItem || detailBusy) {
-    return;
-  }
-  const key = selectedKey;
-  const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
-  const text = textarea?.value ?? "";
-  if (!text.trim()) {
-    showToast(t(language, "player.error.lyrics_empty"));
-    return;
-  }
-  if (text.length > MAX_LYRICS_LENGTH) {
-    showToast(t(language, "player.error.lyrics_too_long"));
-    return;
-  }
-  setDetailBusy(true);
-  try {
-    const updated = await saveLibraryItem(key, text);
-    if (selectedKey !== key) {
-      return;
-    }
-    detailItem = updated;
-    detailEditing = false;
-    await loadLibrary();
-    if (selectedKey === key) {
-      renderDetail();
-    }
-    showToast(t(language, "player.library.saved"));
-  } catch (error) {
-    showToast(errorMessage(language, error));
-  } finally {
-    setDetailBusy(false);
-  }
-}
-
-async function restoreDetail(): Promise<void> {
-  if (!selectedKey || detailBusy) {
-    return;
-  }
-  const key = selectedKey;
-  if (!window.confirm(t(language, "player.library.restore_confirm"))) {
-    return;
-  }
-  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
-    return;
-  }
-  setDetailBusy(true);
-  try {
-    const updated = await restoreLibraryOriginal(key);
-    if (selectedKey !== key) {
-      return;
-    }
-    detailItem = updated;
-    detailEditing = false;
-    await loadLibrary();
-    if (selectedKey === key) {
-      renderDetail();
-    }
-    showToast(t(language, "player.library.restored"));
-  } catch (error) {
-    showToast(errorMessage(language, error));
-  } finally {
-    setDetailBusy(false);
   }
 }
 
@@ -1056,7 +903,6 @@ async function deleteDetail(): Promise<void> {
     if (selectedKey === key) {
       selectedKey = null;
       detailItem = null;
-      detailEditing = false;
       showLibraryList();
     }
     await loadLibrary();
@@ -1248,4 +1094,3 @@ void poll();
 window.setInterval(() => {
   void poll();
 }, 400);
-requestAnimationFrame(tick);

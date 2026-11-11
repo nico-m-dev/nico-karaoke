@@ -218,6 +218,24 @@ Acceptance:
 - [x] `cargo fmt`, clippy, the full Rust suite, the Windows platform check, and web
   typecheck/lint/format/test/build pass.
 
+## Follow-up — owner test round (2026-11-12)
+
+- [x] Restore the lime-green accent from the Python app.
+- [x] Put the idle language switch below the Library button and remove the em dash from the
+  idle lead.
+- [x] Simplify the library detail: read-only preview plus Studio, YouTube, Spotify, and
+  Delete. Text editing and restoring moved fully to the Studio.
+- [x] Match a library record when the active provider omits the artist or adds video/channel
+  decorations, using duration to disambiguate covers.
+- [x] Keep the selected timeline marker in place while zooming.
+- [x] Treat timed lines without text as `♪` music markers in the Studio, matching the player.
+- [x] Replace the misleading per-line play button with an explicit "go to line" action.
+- [x] Move tap mode out of the inspector into the transport bar and show previous and next
+  lines around the line being tapped.
+- [x] Stop animation frames while playback is paused and halve Studio polling.
+- [x] Add tests for metadata matching, blank-line music markers, and the library/Studio
+  split; re-run the live checks.
+
 ## Phase 10 — Packaging
 
 Before packaging starts, the owner runs the app in development and confirms it is ready:

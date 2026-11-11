@@ -533,6 +533,35 @@ async fn rejects_foreign_host_and_origin() {
 }
 
 #[tokio::test]
+async fn matches_a_library_record_when_the_provider_omits_the_artist() {
+    let fixture = Fixture::new(
+        vec![snapshot("player", "I Don't Want You In Here", "")],
+        vec![],
+    );
+    let key = record_key("I Don't Want You In Here", "Solar Fake");
+    let mut item = LyricRecord::new(
+        key.clone(),
+        "I Don't Want You In Here",
+        "Solar Fake",
+        "[00:01.00]Matched line\n",
+    );
+    item.duration = Some(180.0);
+    fixture.library.put(item).expect("record saves");
+
+    fixture.watcher.tick().await;
+
+    let (status, body) = fixture.request(Method::GET, "/api/now", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["lyrics"]["state"], "found");
+    assert_eq!(body["lyrics"]["record_key"], key);
+    assert_eq!(body["lyrics"]["lines"][0]["text"], "Matched line");
+
+    let (_, library) = fixture.request(Method::GET, "/api/library", None).await;
+    assert_eq!(library["current"], key);
+    assert_eq!(library["items"][0]["current"], true);
+}
+
+#[tokio::test]
 async fn a_miss_is_scoped_to_the_track() {
     let fixture = Fixture::new(
         vec![snapshot("player", "Song A", "Artist")],

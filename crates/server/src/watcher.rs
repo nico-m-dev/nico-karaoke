@@ -156,11 +156,10 @@ impl Watcher {
 
     pub fn library_items(&self) -> (Vec<LibrarySummary>, Option<String>) {
         let state = self.state();
-        let current = state
-            .media
-            .snapshot
-            .as_ref()
-            .map(|snapshot| record_key(&snapshot.title, &snapshot.artist));
+        let current =
+            state.media.snapshot.as_ref().map(|snapshot| {
+                self.matched_key(&snapshot.title, &snapshot.artist, snapshot.length)
+            });
         (self.library.summaries(), current)
     }
 
@@ -173,7 +172,17 @@ impl Watcher {
             .media
             .snapshot
             .as_ref()
-            .is_some_and(|snapshot| record_key(&snapshot.title, &snapshot.artist) == key)
+            .is_some_and(|snapshot| {
+                self.matched_key(&snapshot.title, &snapshot.artist, snapshot.length) == key
+            })
+    }
+
+    /// Key for the followed track, using the library's title fallback when a provider omits
+    /// the artist or adds video decorations.
+    fn matched_key(&self, title: &str, artist: &str, duration: Option<f64>) -> String {
+        self.library
+            .find_key(title, artist, duration)
+            .unwrap_or_else(|| record_key(title, artist))
     }
 
     pub async fn choose_player(self: &Arc<Self>, player: &str) -> bool {
@@ -228,7 +237,7 @@ impl Watcher {
         }
 
         let generation = state.media.generation;
-        let key = record_key(&snapshot.title, &snapshot.artist);
+        let key = self.matched_key(&snapshot.title, &snapshot.artist, snapshot.length);
         let existing = self.library.get(&key);
         let mut record = existing.clone().unwrap_or_else(|| {
             LyricRecord::new(
@@ -239,8 +248,10 @@ impl Watcher {
             )
         });
 
-        record.title = snapshot.title.clone();
-        record.artist = snapshot.artist.clone();
+        if existing.is_none() {
+            record.title = snapshot.title.clone();
+            record.artist = snapshot.artist.clone();
+        }
         if !snapshot.album.is_empty() {
             record.album = snapshot.album.clone();
         }
@@ -387,7 +398,7 @@ impl Watcher {
             return Err(WatcherError::TrackChanged);
         }
 
-        let key = record_key(&snapshot.title, &snapshot.artist);
+        let key = self.matched_key(&snapshot.title, &snapshot.artist, snapshot.length);
         let generation = state.media.generation;
         let mut record = self.library.get(&key).ok_or(WatcherError::LyricsNotFound)?;
         record.offset = (value.clamp(-10.0, 10.0) * 100.0).round() / 100.0;
@@ -468,7 +479,7 @@ impl Watcher {
             return;
         };
 
-        let key = record_key(&snapshot.title, &snapshot.artist);
+        let key = self.matched_key(&snapshot.title, &snapshot.artist, snapshot.length);
         let revision = self.revision.load(Ordering::SeqCst);
         let in_flight = *self
             .in_flight

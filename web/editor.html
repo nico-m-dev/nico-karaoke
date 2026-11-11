@@ -44,6 +44,12 @@
         <span class="studio-clock muted" aria-hidden="true">/</span>
         <span id="studio-duration" class="studio-clock muted">0:00</span>
         <div class="studio-actions">
+          <button
+            id="studio-tap-mode"
+            class="ghost"
+            type="button"
+            data-i18n="studio.tap.button"
+          ></button>
           <button id="studio-fetch" class="ghost" type="button" data-i18n="studio.fetch"></button>
           <button
             id="studio-restore"
@@ -144,7 +150,7 @@
           <h2 id="tap-title" data-i18n="studio.tap.title"></h2>
           <p id="tap-hint" class="hint" data-i18n="studio.tap.hint"></p>
           <p id="tap-countdown" class="tap-countdown" aria-live="assertive"></p>
-          <p id="tap-line" class="tap-line" aria-live="polite"></p>
+          <div id="tap-context" class="tap-context" aria-live="polite"></div>
           <p id="tap-progress" class="hint" aria-live="polite"></p>
           <label class="tap-correction">
             <span data-i18n="studio.tap.correction"></span>

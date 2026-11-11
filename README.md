@@ -126,8 +126,8 @@ The library opens from the player and lists every saved text. Search filters by 
 artist, or album. Each item shows its source, sync state, line count, update date, current
 badge, and whether an original is kept.
 
-Open an item to edit the raw LRC, open it in the Studio, restore the saved original, delete
-it, or search for it on YouTube or Spotify.
+Open an item to preview its saved text, open it in the Studio, delete it, or search for it
+on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.
 
 ## Studio
 

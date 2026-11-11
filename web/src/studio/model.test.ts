@@ -57,6 +57,15 @@ describe("makeEditorLines", () => {
     expect(result.lines.filter((line) => isMusicMarker(line.text))).toHaveLength(1);
   });
 
+  it("turns timed blank lines into music markers", () => {
+    const result = makeEditorLines([
+      { t: 5, text: "" },
+      { t: 8, text: "   " },
+      { t: 12, text: "Line", end: null },
+    ]);
+    expect(result.lines.map((line) => line.text)).toEqual(["♪", "♪", "Line"]);
+  });
+
   it("keeps plain lines after timed lines", () => {
     const result = makeEditorLines([
       { t: null, text: "Plain" },

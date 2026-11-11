@@ -91,6 +91,7 @@ const els = {
   play: query<HTMLButtonElement>("#studio-play"),
   time: query<HTMLElement>("#studio-time"),
   duration: query<HTMLElement>("#studio-duration"),
+  tapMode: query<HTMLButtonElement>("#studio-tap-mode"),
   fetch: query<HTMLButtonElement>("#studio-fetch"),
   restore: query<HTMLButtonElement>("#studio-restore"),
   zoom: query<HTMLInputElement>("#timeline-zoom"),
@@ -110,7 +111,7 @@ const els = {
   tapOverlay: query<HTMLElement>("#tap-overlay"),
   tapHint: query<HTMLElement>("#tap-hint"),
   tapCountdown: query<HTMLElement>("#tap-countdown"),
-  tapLine: query<HTMLElement>("#tap-line"),
+  tapContext: query<HTMLElement>("#tap-context"),
   tapProgress: query<HTMLElement>("#tap-progress"),
   tapCorrection: query<HTMLInputElement>("#tap-correction"),
   tapStart: query<HTMLButtonElement>("#tap-start"),
@@ -155,6 +156,7 @@ let anchor: Anchor | null = null;
 let anchorTrack = "";
 let pollBusy = false;
 let pollOffline = false;
+let frameScheduled = false;
 let previewTimer: number | null = null;
 let previewing = false;
 let toastTimer: number | undefined;
@@ -185,8 +187,8 @@ async function boot(): Promise<void> {
 
   window.setInterval(() => {
     void poll();
-  }, 1000);
-  window.requestAnimationFrame(frame);
+  }, 500);
+  void poll();
 }
 
 function applyLanguage(next: Language, persist: boolean): void {
@@ -325,6 +327,14 @@ function renderHeader(): void {
 
   els.save.disabled = (key ? false : !isCurrent()) || !dirty || busy;
   els.undo.disabled = undoStack.length === 0 || busy;
+  els.tapMode.disabled = !isCurrent() || !now?.track?.can_seek || lines.length === 0;
+  els.tapMode.title = !isCurrent()
+    ? t(language, "studio.notice.not_current")
+    : !now?.track?.can_seek
+      ? t(language, "studio.tap.needs_seek")
+      : lines.length === 0
+        ? t(language, "studio.tap.no_lines")
+        : "";
   els.fetch.disabled = busy || fetching || (!key && !now?.track);
   els.fetch.textContent = t(language, fetching ? "studio.fetching" : "studio.fetch");
   els.restore.disabled = !item?.lyrics.original || busy;
@@ -384,6 +394,20 @@ function renderLineList(): void {
       : t(language, "studio.line_count", { count });
   els.linesEmpty.hidden = count > 0;
   renderLines(els.lineList, lines, selectedId, language, lineHandlers);
+}
+
+/** Keep the selected marker (or the viewport centre) in place while zooming. */
+function applyScale(next: number): void {
+  const previous = scale;
+  const selected = lines.find((line) => line.id === selectedId);
+  const selectedTime = selected && selected.t !== null ? selected.t : null;
+  const centre = els.scroll.clientWidth / 2;
+  const anchorTime = selectedTime ?? timeAtX(els.scroll.scrollLeft + centre, previous);
+  const anchorOffset =
+    selectedTime !== null ? xAtTime(selectedTime, previous) - els.scroll.scrollLeft : centre;
+  scale = clampScale(next);
+  renderTimelineView();
+  els.scroll.scrollLeft = Math.max(0, xAtTime(anchorTime, scale) - anchorOffset);
 }
 
 function renderTimelineView(): void {
@@ -721,6 +745,7 @@ async function previewLine(): Promise<void> {
       ok: true,
     };
     await setPlayback("play");
+    ensureFrame();
     previewTimer = window.setTimeout(() => {
       stopAnchor();
       void setPlayback("pause")
@@ -817,6 +842,7 @@ async function beginTapping(): Promise<void> {
       void setPlayback("pause").catch(() => undefined);
       return;
     }
+    ensureFrame();
     tapPhase = "tapping";
     updateTapUI();
     els.tapTap.focus();
@@ -908,7 +934,7 @@ function finishTap(completed: boolean): void {
   els.tapOverlay.hidden = true;
   setTapBackgroundInert(false);
   els.tapCountdown.textContent = "";
-  els.tapLine.textContent = "";
+  els.tapContext.replaceChildren();
   els.tapProgress.textContent = "";
   lines = sortLines(lines);
   renderStructure();
@@ -936,18 +962,28 @@ function updateTapUI(): void {
     done,
     total,
   });
-  if (tapPhase === "countdown") {
-    els.tapLine.textContent = t(language, "studio.tap.waiting");
-    return;
+  const start = Math.max(0, done - 2);
+  const end = Math.min(total, done + 3);
+  const context: HTMLElement[] = [];
+  for (let index = start; index < end; index += 1) {
+    const line = lines[index];
+    if (!line) {
+      continue;
+    }
+    const node = document.createElement("p");
+    node.className = index === done ? "current" : index < done ? "past" : "next";
+    node.textContent = isMusicMarker(line.text)
+      ? t(language, "studio.music")
+      : line.text || t(language, "studio.text_empty");
+    context.push(node);
   }
-  const nextLine = lines[done];
-  if (!nextLine) {
-    els.tapLine.textContent = t(language, "studio.tap.finished");
-    return;
+  if (context.length === 0) {
+    const node = document.createElement("p");
+    node.className = "next";
+    node.textContent = t(language, "studio.tap.finished");
+    context.push(node);
   }
-  els.tapLine.textContent = isMusicMarker(nextLine.text)
-    ? t(language, "studio.music")
-    : nextLine.text || t(language, "studio.text_empty");
+  els.tapContext.replaceChildren(...context);
 }
 
 function closeTap(): void {
@@ -955,8 +991,7 @@ function closeTap(): void {
     tapPhase = null;
     els.tapOverlay.hidden = true;
     setTapBackgroundInert(false);
-    const button = els.inspector.querySelector<HTMLButtonElement>(".inspector-tap");
-    button?.focus();
+    els.tapMode.focus();
     return;
   }
   finishTap(tapSession.index >= lines.length);
@@ -1116,12 +1151,12 @@ function bindEvents(): void {
   els.addMusic.addEventListener("click", addMusic);
 
   els.zoom.addEventListener("input", () => {
-    scale = clampScale(Number(els.zoom.value));
-    renderTimelineView();
+    applyScale(Number(els.zoom.value));
   });
   els.fit.addEventListener("click", () => {
     scale = fitScale(timelineLength(), els.scroll.clientWidth);
     renderTimelineView();
+    els.scroll.scrollLeft = 0;
   });
   els.ruler.addEventListener("pointerdown", (event) => {
     if (!isCurrent() || !now?.track?.can_seek) {
@@ -1143,6 +1178,7 @@ function bindEvents(): void {
     els.rawText.value = serializeLines(lines);
   });
 
+  els.tapMode.addEventListener("click", openTap);
   els.tapStart.addEventListener("click", startTapRun);
   els.tapTap.addEventListener("click", performTap);
   els.tapStop.addEventListener("click", closeTap);
@@ -1210,6 +1246,10 @@ async function seekToTime(time: number): Promise<void> {
       ok: true,
     };
     renderTransport();
+    updatePlayhead(els.playhead, livePosition(), scale);
+    if (anchor.playing) {
+      ensureFrame();
+    }
   } catch (error) {
     showToast(errorMessage(language, error));
   }
@@ -1317,7 +1357,16 @@ function trapFocus(container: HTMLElement, event: KeyboardEvent): void {
   }
 }
 
+function ensureFrame(): void {
+  if (frameScheduled || document.hidden) {
+    return;
+  }
+  frameScheduled = true;
+  window.requestAnimationFrame(frame);
+}
+
 function frame(): void {
+  frameScheduled = false;
   if (isCurrent()) {
     const position = livePosition();
     updatePlayhead(els.playhead, position, scale);
@@ -1325,7 +1374,9 @@ function frame(): void {
   } else {
     updatePlayhead(els.playhead, null, scale);
   }
-  window.requestAnimationFrame(frame);
+  if (isCurrent() && now?.track?.playing && !document.hidden) {
+    ensureFrame();
+  }
 }
 
 async function poll(): Promise<void> {
@@ -1371,6 +1422,10 @@ async function refreshNow(): Promise<void> {
   updateAnchorFrom(state);
   renderTransport();
   renderHeader();
+  updatePlayhead(els.playhead, isCurrent() ? livePosition() : null, scale);
+  if (isCurrent() && state.track?.playing) {
+    ensureFrame();
+  }
 }
 
 function updateAnchorFrom(state: Now): void {

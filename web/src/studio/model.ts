@@ -46,7 +46,10 @@ export function migrateLegacyEnds(source: LyricLine[]): {
     if (typeof line.end === "number") {
       migrated += 1;
     }
-    return { t: line.t, text: line.text };
+    // The player treats a timed line without text as an instrumental break. Keep the
+    // Studio in sync instead of showing an empty "Lyric text" row.
+    const text = line.t !== null && line.text.trim() === "" ? MUSIC_TEXT : line.text;
+    return { t: line.t, text };
   });
 
   const timed = source
