@@ -1,0 +1,39 @@
+# Rust
+/target/
+**/target/
+*.rs.bk
+
+# Node and frontend builds
+node_modules/
+**/node_modules/
+/dist/
+**/dist/
+.vite/
+*.tsbuildinfo
+
+# Local runtime data and logs
+*.log
+/data/
+/local-data/
+/.env
+.env.*
+
+# Packaged artifacts
+/build/
+/release/
+*.AppImage
+*.deb
+*.rpm
+*.exe
+*.msi
+
+# Tauri
+/src-tauri/target/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
