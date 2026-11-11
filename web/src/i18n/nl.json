@@ -111,7 +111,7 @@
   "studio.inspector.tap": "Meetikken",
   "studio.invalid_time": "Gebruik een tijd zoals 01:23.45.",
   "studio.notice.migrated": "Oude [end:]-tags zijn omgezet naar ♪-markeringen. Sla op om de migratie te bewaren.",
-  "studio.notice.current_missing": "Voor de huidige track is nog geen tekst opgeslagen. Haal de tekst op om te beginnen.",
+  "studio.notice.current_missing": "Voor de huidige track is nog geen tekst opgeslagen. Voeg regels toe of haal de tekst van LRCLIB.",
   "studio.notice.not_current": "Dit item is niet de huidige track. Afspelen, beluisteren en huidige tijd overnemen werken alleen voor de huidige track.",
   "studio.notice.no_track": "Er speelt geen track.",
   "studio.error.no_seek": "De speler ondersteunt niet zoeken.",

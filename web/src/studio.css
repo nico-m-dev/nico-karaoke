@@ -34,7 +34,7 @@ body.studio-body {
 }
 
 .studio-heading {
-  min-width: 0;
+  min-width: 8rem;
   flex: 1;
 }
 
@@ -632,8 +632,13 @@ body.studio-body {
   }
 
   .studio-actions {
+    order: 3;
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .studio-save-state {
+    order: 4;
   }
 
   .studio-transport {

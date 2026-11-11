@@ -137,6 +137,8 @@ let booted = false;
 let key: string | null = null;
 let boundTrackId: string | null = null;
 let boundSignature: string | null = null;
+let boundTitle: string | null = null;
+let boundArtist: string | null = null;
 let item: LibraryItemResponse | null = null;
 let now: Now | null = null;
 let lines: EditorLine[] = [];
@@ -223,6 +225,8 @@ async function loadCurrent(): Promise<void> {
     item = null;
     boundTrackId = state.track?.track_id ?? null;
     boundSignature = state.lyrics.signature;
+    boundTitle = state.track?.title ?? null;
+    boundArtist = state.track?.artist ?? null;
     lines = [];
     selectedId = null;
     dirty = false;
@@ -251,6 +255,8 @@ function applyItem(result: LibraryItemResponse): void {
   key = recordKey ?? key;
   boundTrackId = null;
   boundSignature = null;
+  boundTitle = null;
+  boundArtist = null;
   item = result;
   const adopted = makeEditorLines(result.lyrics.lines);
   lines = adopted.lines;
@@ -271,6 +277,8 @@ function showFatal(message: string): void {
   key = null;
   boundTrackId = null;
   boundSignature = null;
+  boundTitle = null;
+  boundArtist = null;
   item = null;
   lines = [];
   selectedId = null;
@@ -291,11 +299,11 @@ function renderStructure(): void {
 function renderHeader(): void {
   const lyrics = item?.lyrics;
   const track = fatalMessage ? null : now?.track;
-  const title = lyrics?.title || track?.title || t(language, "studio.title.unknown");
+  const title = lyrics?.title || boundTitle || track?.title || t(language, "studio.title.unknown");
   els.title.textContent = title;
 
   const parts = [
-    lyrics?.artist || track?.artist || "",
+    lyrics?.artist || boundArtist || track?.artist || "",
     lyrics?.album || "",
     lyrics ? t(language, sourceLabelKey(lyrics.source ?? "manual")) : "",
     lyrics ? (lyrics.synced ? t(language, "library.synced") : t(language, "library.plain")) : "",
@@ -314,7 +322,7 @@ function renderHeader(): void {
   els.saveState.textContent = text;
   els.saveState.classList.toggle("dirty", dirty && !busy);
 
-  els.save.disabled = (!key && !now?.track) || !dirty || busy;
+  els.save.disabled = (key ? false : !isCurrent()) || !dirty || busy;
   els.undo.disabled = undoStack.length === 0 || busy;
   els.fetch.disabled = busy || fetching || (!key && !now?.track);
   els.fetch.textContent = t(language, fetching ? "studio.fetching" : "studio.fetch");
@@ -416,8 +424,8 @@ async function save(): Promise<void> {
   if (busy) {
     return;
   }
-  if (!key && !now?.track) {
-    showToast(t(language, "studio.notice.no_track"));
+  if (!key && !isCurrent()) {
+    showToast(t(language, now?.track ? "studio.notice.track_changed" : "studio.notice.no_track"));
     return;
   }
   const text = serializeLines(lines);
@@ -428,10 +436,14 @@ async function save(): Promise<void> {
   busy = true;
   renderHeader();
   try {
-    const updated = key ? await saveLibraryItem(key, text) : await saveCurrentLyrics(text);
+    const updated = key
+      ? await saveLibraryItem(key, text)
+      : await saveCurrentLyrics(text, boundTrackId ?? undefined, boundSignature ?? undefined);
     key = updated.lyrics.record_key ?? key;
     boundTrackId = null;
     boundSignature = null;
+    boundTitle = null;
+    boundArtist = null;
     item = { ...updated, current: isCurrent() };
     fatalMessage = null;
     dirty = false;
@@ -789,6 +801,9 @@ function startTapRun(): void {
 async function beginTapping(): Promise<void> {
   try {
     await seekPlayer(0);
+    if (tapPhase !== "countdown") {
+      return;
+    }
     anchor = {
       pos: 0,
       at: performance.now(),
@@ -798,6 +813,7 @@ async function beginTapping(): Promise<void> {
     };
     await setPlayback("play");
     if (tapPhase !== "countdown") {
+      void setPlayback("pause").catch(() => undefined);
       return;
     }
     tapPhase = "tapping";
@@ -1013,7 +1029,7 @@ async function fetchFromLrclib(): Promise<void> {
   if (busy) {
     return;
   }
-  if (dirty && !window.confirm(t(language, "studio.fetch_confirm"))) {
+  if ((dirty || item || lines.length > 0) && !window.confirm(t(language, "studio.fetch_confirm"))) {
     return;
   }
   busy = true;

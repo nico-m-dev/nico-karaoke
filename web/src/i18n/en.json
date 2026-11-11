@@ -111,7 +111,7 @@
   "studio.inspector.tap": "Tap mode",
   "studio.invalid_time": "Use a time like 01:23.45.",
   "studio.notice.migrated": "Legacy [end:] tags were converted to ♪ markers. Save to keep the migration.",
-  "studio.notice.current_missing": "No saved lyrics for the current track yet. Fetch them to start editing.",
+  "studio.notice.current_missing": "No saved lyrics for the current track yet. Add lines, or fetch them from LRCLIB.",
   "studio.notice.not_current": "This item is not the current track. Playback, preview, and take-current-time work only for the current track.",
   "studio.notice.no_track": "No track is playing.",
   "studio.error.no_seek": "The player does not support seeking.",
