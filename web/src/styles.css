@@ -466,6 +466,26 @@ body[data-state="playing"] .idle {
   font-size: 0.8rem;
 }
 
+.library-head-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.library-search {
+  width: 100%;
+  margin: 0.7rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.7rem;
+  background: rgba(8, 11, 10, 0.5);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.library-search::placeholder {
+  color: var(--dim);
+}
+
 .library-list {
   display: grid;
   gap: 0.55rem;
@@ -473,15 +493,36 @@ body[data-state="playing"] .idle {
 }
 
 .library-item {
+  display: block;
+  width: 100%;
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.8rem;
   background: rgba(8, 11, 10, 0.35);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.library-item:hover,
+.library-item:focus-visible {
+  border-color: rgba(100, 227, 142, 0.5);
+  background: rgba(100, 227, 142, 0.07);
 }
 
 .library-item.current {
   border-color: rgba(100, 227, 142, 0.5);
   background: var(--accent-soft);
+}
+
+.library-item-title,
+.library-item-artist,
+.library-item-meta {
+  display: block;
 }
 
 .library-item-title {
@@ -506,6 +547,66 @@ body[data-state="playing"] .idle {
   margin: 0.45rem 0 0;
   color: var(--dim);
   font-size: 0.72rem;
+}
+
+.library-detail {
+  margin-top: 1rem;
+}
+
+.detail-back {
+  margin-bottom: 0.9rem;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 1.45rem;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.detail-artist {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.detail-meta {
+  margin: 0.45rem 0 0;
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 1rem 0;
+}
+
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.ghost.primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.detail-text {
+  width: 100%;
+  min-height: 16rem;
+  padding: 0.8rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.8rem;
+  background: rgba(8, 11, 10, 0.5);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  resize: vertical;
 }
 
 .library-empty {

@@ -25,6 +25,14 @@ export type Track = {
   rate: number;
 };
 
+export type OriginalLyrics = {
+  source: string;
+  fetched_at: number;
+  lrclib_id: number | null;
+  synced: boolean;
+  same: boolean;
+};
+
 export type Lyrics = {
   state: "none" | "loading" | "found" | "missing" | "error";
   signature: string | null;
@@ -41,7 +49,7 @@ export type Lyrics = {
   lrclib_id: number | null;
   fetched_at: number;
   updated_at: number;
-  original: unknown;
+  original: OriginalLyrics | null;
   error: string | null;
 };
 
@@ -71,6 +79,11 @@ export type LibraryResponse = {
   items: LibrarySummary[];
   current: string | null;
   signature: string | null;
+};
+
+export type LibraryItemResponse = {
+  lyrics: Lyrics;
+  current: boolean;
 };
 
 export class ApiError extends Error {
@@ -130,4 +143,34 @@ export function togglePlayback(): Promise<{ ok: boolean }> {
 
 export function getLibrary(): Promise<LibraryResponse> {
   return request<LibraryResponse>("/api/library");
+}
+
+export function getLibraryItem(key: string): Promise<LibraryItemResponse> {
+  return request<LibraryItemResponse>(`/api/library/${encodeURIComponent(key)}`);
+}
+
+export function saveLibraryItem(
+  key: string,
+  text: string,
+  source = "manual",
+): Promise<LibraryItemResponse> {
+  return request<LibraryItemResponse>(`/api/library/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, source }),
+  });
+}
+
+export function deleteLibraryItem(key: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/api/library/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+}
+
+export function restoreLibraryOriginal(key: string): Promise<LibraryItemResponse> {
+  return request<LibraryItemResponse>(`/api/library/${encodeURIComponent(key)}/original`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
 }

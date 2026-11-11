@@ -2,9 +2,14 @@ import "./styles.css";
 import {
   ApiError,
   choosePlayer,
+  deleteLibraryItem,
   getLibrary,
+  getLibraryItem,
   getNow,
+  restoreLibraryOriginal,
+  saveLibraryItem,
   togglePlayback,
+  type LibraryItemResponse,
   type LibraryResponse,
   type LibrarySummary,
   type Lyrics,
@@ -90,10 +95,14 @@ app.innerHTML = `
           <h2 id="library-title" data-i18n="player.library"></h2>
           <p class="hint" id="library-count"></p>
         </div>
-        <button class="ghost icon" id="library-close" type="button" data-i18n-title="player.library.close" data-i18n-aria-label="player.library.close">✕</button>
+        <div class="library-head-actions">
+          <button class="ghost icon" id="library-refresh" type="button" data-i18n-title="player.library.refresh" data-i18n-aria-label="player.library.refresh">↻</button>
+          <button class="ghost icon" id="library-close" type="button" data-i18n-title="player.library.close" data-i18n-aria-label="player.library.close">✕</button>
+        </div>
       </header>
-      <p class="hint" data-i18n="player.library.readonly"></p>
+      <input id="library-search" class="library-search" type="search" data-i18n-placeholder="player.library.search_placeholder" data-i18n-aria-label="player.library.search_aria" autocomplete="off">
       <div class="library-list" id="library-list"></div>
+      <section class="library-detail" id="library-detail" hidden></section>
     </aside>
   </div>
 
@@ -123,6 +132,9 @@ const els = {
   library: query<HTMLElement>("#library"),
   libraryList: query<HTMLElement>("#library-list"),
   libraryCount: query<HTMLElement>("#library-count"),
+  librarySearch: query<HTMLInputElement>("#library-search"),
+  libraryDetail: query<HTMLElement>("#library-detail"),
+  libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
   libraryClose: query<HTMLButtonElement>("#library-close"),
   toast: query<HTMLElement>("#toast"),
 };
@@ -167,6 +179,10 @@ let selectionBusy = false;
 let offlineShown = false;
 let libraryData: LibraryResponse | null = null;
 let libraryOpener: HTMLElement | null = null;
+let selectedKey: string | null = null;
+let detailItem: LibraryItemResponse | null = null;
+let detailEditing = false;
+let detailBusy = false;
 
 const ERROR_KEYS: Record<string, MessageKey> = {
   forbidden_host: "player.error.generic",
@@ -216,7 +232,9 @@ function setLanguage(next: Language, persist = true): void {
   updatePlayButton(data.track);
   updateTime(livePosition());
   rebuildLyrics(data.lyrics);
-  if (libraryData) {
+  if (selectedKey && detailItem) {
+    renderDetail();
+  } else if (libraryData) {
     renderLibrary(libraryData);
   }
 }
@@ -501,6 +519,10 @@ function applyNow(next: Now): void {
   updatePlayButton(track);
   updateTime(livePosition());
 
+  if (trackKey(previous.track) !== trackKey(track) && !els.library.hidden && !selectedKey) {
+    void loadLibrary();
+  }
+
   const nextLyricsKey = lyricsCacheKey(next.lyrics);
   if (nextLyricsKey !== lyricsKey) {
     lyricsKey = nextLyricsKey;
@@ -645,71 +667,134 @@ function sourceLabel(source: string): string {
 
 async function openLibrary(): Promise<void> {
   libraryOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  selectedKey = null;
+  detailItem = null;
+  detailEditing = false;
+  els.librarySearch.value = "";
   clearTimeout(chromeTimer);
   els.library.hidden = false;
   els.stage.inert = true;
+  showLibraryList();
   els.libraryClose.focus();
-  els.libraryList.replaceChildren();
-  els.libraryCount.textContent = t(language, "player.lyrics.loading");
-  try {
-    libraryData = await getLibrary();
-    renderLibrary(libraryData);
-  } catch (error) {
-    els.libraryCount.textContent = errorMessage(error);
-  }
+  await loadLibrary();
 }
 
 function closeLibrary(): void {
   if (els.library.hidden) {
     return;
   }
+  if (detailDirty()) {
+    if (!window.confirm(t(language, "player.library.discard_confirm"))) {
+      return;
+    }
+  }
   els.library.hidden = true;
   els.stage.inert = false;
+  selectedKey = null;
+  detailItem = null;
+  detailEditing = false;
   showChrome();
   const opener = libraryOpener;
   libraryOpener = null;
   opener?.focus();
 }
 
+function showLibraryList(): void {
+  els.librarySearch.hidden = false;
+  els.libraryList.hidden = false;
+  els.libraryDetail.hidden = true;
+}
+
+async function refreshLibrary(): Promise<void> {
+  await loadLibrary();
+  if (selectedKey) {
+    await openDetail(selectedKey);
+  }
+}
+
+async function loadLibrary(): Promise<void> {
+  els.libraryCount.textContent = t(language, "player.lyrics.loading");
+  try {
+    libraryData = await getLibrary();
+    if (selectedKey) {
+      els.libraryCount.textContent = t(language, "player.library.count", {
+        count: libraryData.items.length,
+      });
+    } else {
+      renderLibrary(libraryData);
+    }
+  } catch (error) {
+    els.libraryCount.textContent = errorMessage(error);
+    const hint = document.createElement("p");
+    hint.className = "hint library-empty";
+    hint.textContent = errorMessage(error);
+    els.libraryList.replaceChildren(hint);
+  }
+}
+
 function renderLibrary(library: LibraryResponse): void {
+  showLibraryList();
   els.libraryCount.textContent = t(language, "player.library.count", {
     count: library.items.length,
   });
 
-  if (library.items.length === 0) {
+  const query = els.librarySearch.value.trim().toLocaleLowerCase();
+  const items = library.items.filter((item) => matchesQuery(item, query));
+
+  if (items.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint library-empty";
-    empty.textContent = t(language, "player.library.empty");
+    empty.textContent = t(
+      language,
+      query && library.items.length > 0 ? "player.library.no_results" : "player.library.empty",
+    );
     els.libraryList.replaceChildren(empty);
     return;
   }
 
-  const nodes = library.items.map((item) => libraryItem(item));
+  const nodes = items.map((item) => libraryItem(item));
   els.libraryList.replaceChildren(...nodes);
 }
 
+function matchesQuery(item: LibrarySummary, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+  return [item.title, item.artist, item.album].some((value) =>
+    value.toLocaleLowerCase().includes(query),
+  );
+}
+
 function libraryItem(item: LibrarySummary): HTMLElement {
-  const card = document.createElement("article");
+  const card = document.createElement("button");
+  card.type = "button";
   card.className = "library-item";
   if (item.current) {
     card.classList.add("current");
   }
+  card.addEventListener("click", () => {
+    void openDetail(item.key);
+  });
 
-  const title = document.createElement("p");
+  const title = document.createElement("span");
   title.className = "library-item-title";
   title.textContent = item.title || t(language, "player.unknown_track");
 
-  const artist = document.createElement("p");
+  const artist = document.createElement("span");
   artist.className = "library-item-artist";
   artist.textContent = [item.artist, item.album].filter(Boolean).join(" · ");
 
-  const meta = document.createElement("p");
+  const meta = document.createElement("span");
   meta.className = "library-item-meta";
   const parts = [
     sourceLabel(item.source),
     item.synced ? t(language, "library.synced") : t(language, "library.plain"),
     t(language, "library.lines", { count: item.line_count }),
+    formatDate(item.updated_at),
   ];
+  if (item.has_original) {
+    parts.push(t(language, "player.library.original_available"));
+  }
   if (item.current) {
     parts.unshift(t(language, "player.library.current"));
   }
@@ -717,6 +802,302 @@ function libraryItem(item: LibrarySummary): HTMLElement {
 
   card.append(title, artist, meta);
   return card;
+}
+
+async function openDetail(key: string): Promise<void> {
+  selectedKey = key;
+  detailItem = null;
+  detailEditing = false;
+  els.librarySearch.hidden = true;
+  els.libraryList.hidden = true;
+  els.libraryDetail.hidden = false;
+  els.libraryDetail.replaceChildren(hintNode(t(language, "player.lyrics.loading")));
+
+  try {
+    const item = await getLibraryItem(key);
+    if (selectedKey !== key) {
+      return;
+    }
+    detailItem = item;
+    renderDetail();
+  } catch (error) {
+    if (selectedKey === key) {
+      renderDetailError(errorMessage(error));
+    }
+  }
+}
+
+function renderDetail(): void {
+  if (!selectedKey || !detailItem) {
+    return;
+  }
+  const item = detailItem;
+  const lyrics = item.lyrics;
+  const editorText = detailEditing
+    ? (els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text")?.value ?? lyrics.text)
+    : lyrics.text;
+  els.libraryDetail.replaceChildren();
+  els.librarySearch.hidden = true;
+  els.libraryList.hidden = true;
+  els.libraryDetail.hidden = false;
+
+  const back = actionButton(t(language, "player.library.back"), () => {
+    void backToLibrary();
+  });
+  back.classList.add("detail-back");
+  els.libraryDetail.append(back);
+
+  const title = document.createElement("h3");
+  title.className = "detail-title";
+  title.tabIndex = -1;
+  title.textContent = lyrics.title || t(language, "player.unknown_track");
+  els.libraryDetail.append(title);
+
+  const artist = document.createElement("p");
+  artist.className = "detail-artist";
+  artist.textContent = [lyrics.artist, lyrics.album].filter(Boolean).join(" · ");
+  els.libraryDetail.append(artist);
+
+  const meta = document.createElement("p");
+  meta.className = "detail-meta";
+  meta.textContent = [
+    item.current ? t(language, "player.library.current") : "",
+    sourceLabel(lyrics.source ?? "manual"),
+    lyrics.synced ? t(language, "library.synced") : t(language, "library.plain"),
+    t(language, "library.lines", { count: lyrics.lines.length }),
+    lyrics.duration ? formatTime(lyrics.duration) : "",
+    formatDate(lyrics.updated_at),
+    lyrics.offset ? t(language, "player.library.offset", { value: lyrics.offset }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  els.libraryDetail.append(meta);
+
+  const actions = document.createElement("div");
+  actions.className = "detail-actions";
+  if (!detailEditing) {
+    actions.append(
+      actionButton(t(language, "player.library.edit"), () => {
+        detailEditing = true;
+        renderDetail();
+      }),
+    );
+  }
+  actions.append(
+    externalLink(t(language, "library.youtube"), youtubeUrl(lyrics)),
+    externalLink(t(language, "library.spotify"), spotifyUrl(lyrics)),
+  );
+
+  if (lyrics.original) {
+    actions.append(
+      actionButton(t(language, "player.library.restore"), () => {
+        void restoreDetail();
+      }),
+    );
+  }
+
+  const remove = actionButton(t(language, "player.library.delete"), () => {
+    void deleteDetail();
+  });
+  remove.classList.add("danger");
+  actions.append(remove);
+  els.libraryDetail.append(actions);
+
+  if (detailEditing) {
+    renderEditor(item, editorText);
+  } else {
+    title.focus();
+  }
+}
+
+function renderEditor(item: LibraryItemResponse, text = item.lyrics.text): void {
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = t(language, "player.library.raw_hint");
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "detail-text";
+  textarea.id = "detail-text";
+  textarea.spellcheck = false;
+  textarea.rows = 12;
+  textarea.value = text;
+  textarea.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      void saveDetail();
+    }
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "detail-actions";
+  actions.append(
+    actionButton(
+      t(language, "player.library.save"),
+      () => {
+        void saveDetail();
+      },
+      "primary",
+    ),
+    actionButton(t(language, "player.library.cancel"), () => {
+      if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
+        return;
+      }
+      detailEditing = false;
+      renderDetail();
+    }),
+  );
+
+  els.libraryDetail.append(hint, actions, textarea);
+  textarea.focus();
+}
+
+function detailDirty(): boolean {
+  if (!detailEditing || !detailItem) {
+    return false;
+  }
+  const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
+  return Boolean(textarea && textarea.value !== detailItem.lyrics.text);
+}
+
+async function backToLibrary(): Promise<void> {
+  if (detailDirty() && !window.confirm(t(language, "player.library.discard_confirm"))) {
+    return;
+  }
+  selectedKey = null;
+  detailItem = null;
+  detailEditing = false;
+  showLibraryList();
+  if (libraryData) {
+    renderLibrary(libraryData);
+  }
+}
+
+async function saveDetail(): Promise<void> {
+  if (!selectedKey || !detailItem || detailBusy) {
+    return;
+  }
+  const textarea = els.libraryDetail.querySelector<HTMLTextAreaElement>("#detail-text");
+  const text = textarea?.value ?? "";
+  if (!text.trim()) {
+    showToast(t(language, "player.error.generic"));
+    return;
+  }
+  detailBusy = true;
+  try {
+    detailItem = await saveLibraryItem(selectedKey, text);
+    detailEditing = false;
+    await loadLibrary();
+    renderDetail();
+    showToast(t(language, "player.library.saved"));
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    detailBusy = false;
+  }
+}
+
+async function restoreDetail(): Promise<void> {
+  if (!selectedKey || detailBusy) {
+    return;
+  }
+  if (!window.confirm(t(language, "player.library.restore_confirm"))) {
+    return;
+  }
+  detailBusy = true;
+  try {
+    detailItem = await restoreLibraryOriginal(selectedKey);
+    detailEditing = false;
+    await loadLibrary();
+    renderDetail();
+    showToast(t(language, "player.library.restored"));
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    detailBusy = false;
+  }
+}
+
+async function deleteDetail(): Promise<void> {
+  if (!selectedKey || !detailItem || detailBusy) {
+    return;
+  }
+  const title = detailItem.lyrics.title || t(language, "player.unknown_track");
+  if (!window.confirm(t(language, "player.library.delete_confirm", { title }))) {
+    return;
+  }
+  detailBusy = true;
+  try {
+    await deleteLibraryItem(selectedKey);
+    selectedKey = null;
+    detailItem = null;
+    detailEditing = false;
+    showLibraryList();
+    await loadLibrary();
+    showToast(t(language, "player.library.deleted"));
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    detailBusy = false;
+  }
+}
+
+function renderDetailError(message: string): void {
+  els.libraryDetail.replaceChildren();
+  const back = actionButton(t(language, "player.library.back"), () => {
+    void backToLibrary();
+  });
+  els.libraryDetail.append(back, hintNode(message));
+}
+
+function actionButton(label: string, action: () => void, className = ""): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `ghost ${className}`.trim();
+  button.textContent = label;
+  button.addEventListener("click", action);
+  return button;
+}
+
+function externalLink(label: string, href: string): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.className = "ghost detail-link";
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = label;
+  return link;
+}
+
+function hintNode(text: string): HTMLParagraphElement {
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = text;
+  return hint;
+}
+
+function formatDate(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "";
+  }
+  try {
+    return new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
+      new Date(seconds * 1000),
+    );
+  } catch {
+    return "";
+  }
+}
+
+function youtubeUrl(lyrics: Lyrics): string {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    `${lyrics.title} ${lyrics.artist}`.trim(),
+  )}`;
+}
+
+function spotifyUrl(lyrics: Lyrics): string {
+  return `https://open.spotify.com/search/${encodeURIComponent(
+    `${lyrics.title} ${lyrics.artist}`.trim(),
+  )}`;
 }
 
 function bind(): void {
@@ -736,6 +1117,14 @@ function bind(): void {
     void openLibrary();
   });
   els.libraryClose.addEventListener("click", closeLibrary);
+  els.librarySearch.addEventListener("input", () => {
+    if (libraryData && !selectedKey) {
+      renderLibrary(libraryData);
+    }
+  });
+  els.libraryRefresh.addEventListener("click", () => {
+    void refreshLibrary();
+  });
   els.library.addEventListener("click", (event) => {
     if (event.target === els.library) {
       closeLibrary();

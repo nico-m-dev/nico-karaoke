@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 6 complete. Phase 7 is next.
+Status: Phase 7 complete. Phase 8 is next.
 
 ## Phase 1 — Foundation
 
@@ -123,10 +123,24 @@ Acceptance:
 
 ## Phase 7 — Library UI
 
-- [ ] Search by title, artist, and album.
-- [ ] Item cards with source, sync state, line count, date, and original badge.
-- [ ] Edit, delete with confirmation, refresh, and external search links.
-- [ ] Empty, loading, error, and no-results states.
+- [x] Search by title, artist, and album.
+- [x] Item cards with source, sync state, line count, date, and original badge.
+- [x] Detail view with raw-text editing and save.
+- [x] Restore the saved original with confirmation.
+- [x] Delete with confirmation.
+- [x] Refresh and current-track badge.
+- [x] External YouTube and Spotify search links.
+- [x] Empty, loading, error, and no-results states.
+
+Acceptance:
+
+- [x] The library opens from the idle and playing views.
+- [x] Search filters the visible items without a page reload.
+- [x] A detail view loads raw text, saves changes through `PUT /api/library/{key}`, and restores originals.
+- [x] Delete removes the item and refreshes the list.
+- [x] Focus stays inside the dialog; closing restores the opener.
+- [x] Live Chromium check with two items: search, edit/save, restore original, delete, and external links.
+- [x] `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`, and `npm run build` pass.
 
 ## Phase 8 — Studio UI
 

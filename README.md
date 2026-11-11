@@ -10,8 +10,8 @@ does not record audio, download tracks, or play video.
 ## Status
 
 Development phase. The workspace, local server, typed frontend, media providers, lyrics
-lookup, library, watcher, local API, and player UI are implemented; the library browser and
-Studio editor come next. The server binds to `127.0.0.1` by default and validates
+lookup, library, watcher, local API, player UI, and library browser are implemented; the
+Studio timeline editor comes next. The server binds to `127.0.0.1` by default and validates
 `Host`/`Origin`.
 
 See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
@@ -112,11 +112,20 @@ past lines fade; unsynchronised lyrics fall back to a readable scrollable list.
 | `Space` | play / pause the followed player |
 | `F` | toggle fullscreen |
 | player picker | choose which player to follow |
-| `Library` | open the read-only library browser |
+| `Library` | open the searchable library browser |
 | `NL` / `EN` | switch language from the idle screen |
 
 The bars fade after a few seconds while playing; move the mouse or press a key to bring them
 back.
+
+## Library
+
+The library opens from the player and lists every saved text. Search filters by title,
+artist, or album. Each item shows its source, sync state, line count, update date, current
+badge, and whether an original is kept.
+
+Open an item to edit the raw LRC, save it, restore the saved original, delete it, or search
+for it on YouTube or Spotify. The Studio timeline editor is the next phase.
 
 ## Local API
 
