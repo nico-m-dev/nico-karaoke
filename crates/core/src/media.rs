@@ -159,6 +159,7 @@ pub struct MediaTracker {
     snapshots: Vec<PlayerSnapshot>,
     snapshot: Option<PlayerSnapshot>,
     preferred: Option<String>,
+    preferred_misses: u8,
     chosen: Option<String>,
     signature: Option<String>,
     generation: u64,
@@ -184,12 +185,18 @@ impl MediaTracker {
             .collect();
 
         if let Some(preferred) = &self.preferred {
-            if !self
+            if self
                 .snapshots
                 .iter()
                 .any(|snapshot| snapshot.player == *preferred)
             {
-                self.preferred = None;
+                self.preferred_misses = 0;
+            } else {
+                self.preferred_misses = self.preferred_misses.saturating_add(1);
+                if self.preferred_misses >= 2 {
+                    self.preferred = None;
+                    self.preferred_misses = 0;
+                }
             }
         }
 
@@ -244,6 +251,7 @@ impl MediaTracker {
         };
 
         self.preferred = Some(player.to_owned());
+        self.preferred_misses = 0;
         self.chosen = Some(player.to_owned());
         self.snapshot = (!found.title.is_empty()).then_some(found);
 
@@ -456,6 +464,41 @@ mod tests {
             .await
             .expect("control works");
         assert_eq!(provider.actions()[0].0, "player-b");
+    }
+
+    #[tokio::test]
+    async fn restores_a_preference_after_a_short_disappearance() {
+        let mut first = snapshot("player-a", "Song A", "Artist");
+        first.playing = true;
+        let mut second = snapshot("player-b", "Song B", "Artist");
+        second.playing = true;
+        let mut tracker = MediaTracker::new();
+        tracker.update(vec![first.clone(), second.clone()]);
+        assert!(tracker.choose("player-b"));
+
+        let fallback = tracker.update(vec![first.clone()]);
+        assert_eq!(fallback.state.chosen.as_deref(), Some("player-a"));
+        assert_eq!(tracker.preferred.as_deref(), Some("player-b"));
+
+        let restored = tracker.update(vec![first, second]);
+        assert_eq!(restored.state.chosen.as_deref(), Some("player-b"));
+    }
+
+    #[tokio::test]
+    async fn drops_a_preference_after_two_missing_polls() {
+        let mut first = snapshot("player-a", "Song A", "Artist");
+        first.playing = true;
+        let mut second = snapshot("player-b", "Song B", "Artist");
+        second.playing = true;
+        let mut tracker = MediaTracker::new();
+        tracker.update(vec![first.clone(), second]);
+        assert!(tracker.choose("player-b"));
+
+        tracker.update(vec![first.clone()]);
+        tracker.update(vec![first.clone()]);
+        assert!(tracker.preferred.is_none());
+        let update = tracker.update(vec![first]);
+        assert_eq!(update.state.chosen.as_deref(), Some("player-a"));
     }
 
     #[tokio::test]

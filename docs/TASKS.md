@@ -84,7 +84,7 @@ Acceptance:
 - [ ] Playback control endpoint.
 - [ ] Library list, item, save, create, delete, and original endpoints.
 - [ ] Call synchronous library I/O through `spawn_blocking` so Axum worker threads stay free.
-- [ ] Run lookups in a background task and apply results only when the media generation is unchanged.
+- [ ] Run lookups in a background task and apply results only when the media generation is unchanged. A player switch can change the generation without a `track_changed` update, so key the lookup on generation.
 - [ ] Add a short failure cooldown so an outage does not cause a request on every poll.
 - [ ] Lyrics lookup endpoint for the current and selected track.
 - [ ] Offset endpoint.

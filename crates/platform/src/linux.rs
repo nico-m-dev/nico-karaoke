@@ -13,6 +13,7 @@ const PLAYER_IFACE: &str = "org.mpris.MediaPlayer2.Player";
 const ROOT_IFACE: &str = "org.mpris.MediaPlayer2";
 const DBUS_IFACE: &str = "org.freedesktop.DBus";
 const CALL_TIMEOUT: Duration = Duration::from_secs(4);
+const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct LinuxMediaProvider {
     connection: zbus::Connection,
@@ -104,7 +105,7 @@ impl MediaProvider for LinuxMediaProvider {
     async fn snapshots(&self) -> Result<Vec<PlayerSnapshot>, MediaError> {
         let mut snapshots = Vec::new();
         for name in self.player_names().await? {
-            match tokio::time::timeout(CALL_TIMEOUT, self.snapshot_for(&name)).await {
+            match tokio::time::timeout(SNAPSHOT_TIMEOUT, self.snapshot_for(&name)).await {
                 Ok(Ok(snapshot)) => snapshots.push(snapshot),
                 Ok(Err(_)) | Err(_) => {
                     // A player can disappear or stall; keep the other players usable.
