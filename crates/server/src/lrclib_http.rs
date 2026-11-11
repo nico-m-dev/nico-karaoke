@@ -53,17 +53,26 @@ impl HttpLyricsClient {
             ));
         }
 
-        let body = response
-            .text()
-            .await
-            .map_err(|error| LyricsError::Request(error.without_url().to_string()))?;
-        if body.len() > MAX_RESPONSE_BYTES {
+        let body = read_body(response).await?;
+        Ok((status, body))
+    }
+}
+
+async fn read_body(mut response: reqwest::Response) -> Result<String, LyricsError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| LyricsError::Request(error.without_url().to_string()))?
+    {
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
             return Err(LyricsError::Request(
                 "LRCLIB response is too large".to_owned(),
             ));
         }
-        Ok((status, body))
+        body.extend_from_slice(&chunk);
     }
+    String::from_utf8(body).map_err(|error| LyricsError::Decode(error.to_string()))
 }
 
 #[async_trait]

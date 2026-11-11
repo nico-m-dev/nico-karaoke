@@ -579,6 +579,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn short_circuits_after_a_synced_album_match() {
+        let synced = track(1, "Song", "Artist", 180.0, Some("[00:01.00]Synced\n"), None);
+        let client = FakeClient::new(vec![Ok(vec![synced])], vec![]);
+        let lookup = LyricsLookup::new(client.clone());
+
+        let outcome = lookup
+            .lookup_at(&track_query(180.0), 1000.0)
+            .await
+            .expect("lookup works");
+
+        assert!(matches!(outcome, LookupOutcome::Found(_)));
+        assert_eq!(client.get_count(), 1);
+        assert_eq!(client.search_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn partial_failure_is_not_cached() {
+        let client = FakeClient::new(
+            vec![
+                Err(LyricsError::Request("album down".to_owned())),
+                Ok(Vec::new()),
+            ],
+            vec![Ok(Vec::new())],
+        );
+        let lookup = LyricsLookup::new(client.clone());
+
+        let error = lookup
+            .lookup_at(&track_query(180.0), 1000.0)
+            .await
+            .expect_err("partial failure is reported");
+        assert!(matches!(error, LyricsError::Request(_)));
+
+        let calls_before = client.get_count() + client.search_count();
+        let outcome = lookup
+            .lookup_at(&track_query(180.0), 1001.0)
+            .await
+            .expect("retry reaches the client");
+        assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1001.0 });
+        assert!(client.get_count() + client.search_count() > calls_before);
+    }
+
+    #[tokio::test]
+    async fn invalid_duration_is_treated_as_unknown() {
+        let synced = track(1, "Song", "Artist", 200.0, Some("[00:01.00]Synced\n"), None);
+        let client = FakeClient::new(vec![Ok(Vec::new()), Ok(Vec::new())], vec![Ok(vec![synced])]);
+        let lookup = LyricsLookup::new(client);
+
+        let outcome = lookup
+            .lookup_at(
+                &TrackQuery::new("Song", "Artist", "Album", Some(f64::NAN)),
+                1000.0,
+            )
+            .await
+            .expect("lookup works");
+
+        assert!(matches!(outcome, LookupOutcome::Found(_)));
+    }
+
+    #[tokio::test]
+    async fn backwards_clock_does_not_use_a_future_miss() {
+        let client = FakeClient::new(vec![Ok(Vec::new()), Ok(Vec::new())], vec![Ok(vec![])]);
+        let lookup = LyricsLookup::new(client.clone());
+
+        assert_eq!(
+            lookup
+                .lookup_at(&track_query(180.0), 4600.5)
+                .await
+                .expect("first lookup"),
+            LookupOutcome::Missing { fetched_at: 4600.5 }
+        );
+        let calls_before = client.get_count() + client.search_count();
+
+        assert_eq!(
+            lookup
+                .lookup_at(&track_query(180.0), 500.0)
+                .await
+                .expect("backwards lookup"),
+            LookupOutcome::Missing { fetched_at: 500.0 }
+        );
+        assert!(client.get_count() + client.search_count() > calls_before);
+    }
+
+    #[tokio::test]
     async fn searches_when_the_exact_match_is_only_plain_text() {
         let plain = track(1, "Song", "Artist", 180.0, None, Some("Plain\n"));
         let synced = track(2, "Song", "Artist", 181.0, Some("[00:01.00]Better\n"), None);
