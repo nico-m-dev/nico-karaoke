@@ -401,7 +401,11 @@ pub async fn fetch_lyrics(
         .fetch(&title, &artist, &album, length)
         .await
         .map_err(watcher_error)?;
-    let signature = snapshot.as_ref().map(PlayerSnapshot::signature);
+    let signature = if body.item_key.is_some() {
+        None
+    } else {
+        snapshot.as_ref().map(PlayerSnapshot::signature)
+    };
     Ok(Json(LyricsDto::found(record, signature)))
 }
 
@@ -476,7 +480,11 @@ fn is_local_request(config: &AppConfig, headers: &HeaderMap) -> bool {
                 return false;
             };
             if let Some(host) = uri.host() {
-                let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+                let host = host
+                    .strip_prefix('[')
+                    .and_then(|value| value.strip_suffix(']'))
+                    .unwrap_or(host)
+                    .to_ascii_lowercase();
                 if !allowed_host(config, &host) {
                     return false;
                 }
@@ -499,8 +507,10 @@ fn allowed_host(config: &AppConfig, host: &str) -> bool {
 fn host_name(host: &str) -> String {
     let host = host.trim();
     if let Some(rest) = host.strip_prefix('[') {
-        if let Some((inside, _)) = rest.split_once(']') {
-            return inside.to_ascii_lowercase();
+        if let Some((inside, after)) = rest.split_once(']') {
+            if after.is_empty() || after.starts_with(':') {
+                return inside.to_ascii_lowercase();
+            }
         }
     }
     host.rsplit_once(':')

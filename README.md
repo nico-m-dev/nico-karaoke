@@ -116,7 +116,7 @@ machine and rejects foreign `Host`/`Origin` headers.
 | `GET` | `/api/library/{key}` | full library item |
 | `PUT` | `/api/library/{key}` | save edited text |
 | `DELETE` | `/api/library/{key}` | delete an item |
-| `POST` | `/api/library/{key}/original` | restore the saved original |
+| `POST` | `/api/library/{key}/original` | restore the saved original; send `{}` as JSON |
 | `POST` | `/api/lyrics` | save text for the current track |
 | `POST` | `/api/lyrics/offset` | update the current offset |
 | `POST` | `/api/lyrics/fetch` | look up lyrics without saving |
