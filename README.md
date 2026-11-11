@@ -124,6 +124,9 @@ machine and rejects foreign `Host`/`Origin` headers.
 Errors use stable codes such as `forbidden_host`, `no_current_track`, `track_changed`,
 `lyrics_not_found`, `invalid_json`, and `unsupported_media_type`.
 
+`signature` identifies the current track by normalised artist and title; `record_key`
+identifies the library file. `item_key` in lookup requests is a library key.
+
 ## Checks
 
 ```bash

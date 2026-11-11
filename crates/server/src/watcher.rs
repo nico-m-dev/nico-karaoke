@@ -21,8 +21,8 @@ pub enum LyricsView {
     None,
     Loading { key: String },
     Found(Box<LyricRecord>),
-    Missing { fetched_at: f64 },
-    Error { message: String },
+    Missing { key: String, fetched_at: f64 },
+    Error { code: &'static str },
 }
 
 impl LyricsView {
@@ -30,6 +30,7 @@ impl LyricsView {
         match self {
             Self::Loading { key } => Some(key),
             Self::Found(record) => Some(&record.key),
+            Self::Missing { key, .. } => Some(key),
             _ => None,
         }
     }
@@ -49,6 +50,8 @@ pub enum WatcherError {
     TrackChanged,
     #[error("lyrics not found")]
     LyricsNotFound,
+    #[error("lyrics lookup is still running")]
+    LyricsPending,
     #[error("no original kept")]
     NoOriginal,
     #[error("invalid value")]
@@ -84,6 +87,7 @@ pub struct Watcher {
     state: RwLock<WatcherState>,
     in_flight: Mutex<Option<(u64, u64)>>,
     cooldown: Mutex<Option<Cooldown>>,
+    ensure_lock: Mutex<()>,
     revision: AtomicU64,
 }
 
@@ -104,6 +108,7 @@ impl Watcher {
             }),
             in_flight: Mutex::new(None),
             cooldown: Mutex::new(None),
+            ensure_lock: Mutex::new(()),
             revision: AtomicU64::new(0),
         }
     }
@@ -234,10 +239,14 @@ impl Watcher {
             )
         });
 
-        record.title = snapshot.title;
-        record.artist = snapshot.artist;
-        record.album = snapshot.album;
-        record.duration = snapshot.length;
+        record.title = snapshot.title.clone();
+        record.artist = snapshot.artist.clone();
+        if !snapshot.album.is_empty() {
+            record.album = snapshot.album.clone();
+        }
+        if snapshot.length.is_some() {
+            record.duration = snapshot.length;
+        }
         record.text = text.clone();
         record.source = source;
         record.updated_at = 0.0;
@@ -338,6 +347,7 @@ impl Watcher {
                 self.set_lyrics(
                     generation,
                     LyricsView::Missing {
+                        key: key.to_owned(),
                         fetched_at: unix_now(),
                     },
                 );
@@ -378,11 +388,14 @@ impl Watcher {
         }
 
         let key = record_key(&snapshot.title, &snapshot.artist);
+        let generation = state.media.generation;
         let mut record = self.library.get(&key).ok_or(WatcherError::LyricsNotFound)?;
         record.offset = (value.clamp(-10.0, 10.0) * 100.0).round() / 100.0;
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();
-        let generation = self.state().media.generation;
+        if !self.is_generation(generation) || !self.is_current_key(&key) {
+            return Err(WatcherError::TrackChanged);
+        }
         self.set_lyrics(generation, LyricsView::Found(Box::new(saved.clone())));
         Ok(saved)
     }
@@ -404,12 +417,16 @@ impl Watcher {
                     attempts += 1;
                     sleep(PENDING_DELAY).await;
                 }
-                LookupOutcome::Pending => return Err(WatcherError::LyricsNotFound),
+                LookupOutcome::Pending => return Err(WatcherError::LyricsPending),
             }
         }
     }
 
     fn ensure_lyrics(self: &Arc<Self>) {
+        let _guard = self
+            .ensure_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let (snapshot, generation) = {
             let state = self
                 .state
@@ -447,7 +464,10 @@ impl Watcher {
                 {
                     return;
                 }
-                LyricsView::Missing { fetched_at } if miss_is_fresh(*fetched_at, unix_now()) => {
+                LyricsView::Missing {
+                    key: missing,
+                    fetched_at,
+                } if *missing == key && miss_is_fresh(*fetched_at, unix_now()) => {
                     return;
                 }
                 LyricsView::Error { .. }
@@ -523,23 +543,30 @@ impl Watcher {
                     watcher.set_lyrics(generation, LyricsView::Found(Box::new(final_record)));
                 }
                 Ok(LookupOutcome::Missing { fetched_at }) => {
-                    watcher.set_lyrics(generation, LyricsView::Missing { fetched_at });
+                    watcher.set_lyrics(
+                        generation,
+                        LyricsView::Missing {
+                            key: key.clone(),
+                            fetched_at,
+                        },
+                    );
                 }
                 Ok(LookupOutcome::Pending) => {
-                    watcher.set_cooldown(generation);
+                    watcher.set_cooldown(generation, Duration::from_secs(5));
                     watcher.set_lyrics(
                         generation,
                         LyricsView::Error {
-                            message: "lookup is still running".to_owned(),
+                            code: "lyrics_pending",
                         },
                     );
                 }
                 Err(error) => {
-                    watcher.set_cooldown(generation);
+                    tracing::warn!(error = %error, "lyrics lookup failed");
+                    watcher.set_cooldown(generation, FAILURE_COOLDOWN);
                     watcher.set_lyrics(
                         generation,
                         LyricsView::Error {
-                            message: error.to_string(),
+                            code: "lyrics_unavailable",
                         },
                     );
                 }
@@ -571,13 +598,13 @@ impl Watcher {
         }
     }
 
-    fn set_cooldown(&self, generation: u64) {
+    fn set_cooldown(&self, generation: u64, duration: Duration) {
         *self
             .cooldown
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Cooldown {
             generation,
-            until: Instant::now() + FAILURE_COOLDOWN,
+            until: Instant::now() + duration,
         });
     }
 

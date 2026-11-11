@@ -1,22 +1,36 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use nico_karaoke_core::{AppConfig, FakeMediaProvider, LaunchMode, Library, LyricsLookup};
-use nico_karaoke_server::lrclib_http::HttpLyricsClient;
+use nico_karaoke_core::{
+    AppConfig, FakeMediaProvider, LaunchMode, Library, LookupQuery, LrclibTrack, LyricsClient,
+    LyricsError, LyricsLookup,
+};
 use nico_karaoke_server::watcher::Watcher;
 use nico_karaoke_server::{AppState, app};
 use serde_json::Value;
 use tower::ServiceExt;
 
+struct NoopLyrics;
+
+#[async_trait]
+impl LyricsClient for NoopLyrics {
+    async fn get(&self, _query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
+        Ok(Vec::new())
+    }
+
+    async fn search(&self, _query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
+        Ok(Vec::new())
+    }
+}
+
 fn test_state() -> (AppState, tempfile::TempDir) {
     let temp = tempfile::tempdir().expect("temp directory");
     let library = Arc::new(Library::open(temp.path()).expect("library opens"));
-    let lookup = Arc::new(LyricsLookup::new(Arc::new(
-        HttpLyricsClient::new().expect("HTTP client builds"),
-    )));
+    let lookup = Arc::new(LyricsLookup::new(Arc::new(NoopLyrics)));
     let provider = Arc::new(FakeMediaProvider::default());
     let watcher = Arc::new(Watcher::new(provider, lookup, library));
 

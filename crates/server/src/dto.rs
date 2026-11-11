@@ -60,7 +60,7 @@ pub struct OriginalDto {
 #[derive(Debug, Serialize)]
 pub struct LyricsDto {
     pub state: &'static str,
-    pub key: Option<String>,
+    pub signature: Option<String>,
     pub record_key: Option<String>,
     pub synced: bool,
     pub offset: f64,
@@ -75,7 +75,7 @@ pub struct LyricsDto {
     pub fetched_at: f64,
     pub updated_at: f64,
     pub original: Option<OriginalDto>,
-    pub message: Option<String>,
+    pub error: Option<&'static str>,
 }
 
 impl LyricsDto {
@@ -89,15 +89,15 @@ impl LyricsDto {
         dto
     }
 
-    pub fn missing(fetched_at: f64, signature: Option<String>) -> Self {
-        let mut dto = Self::empty("missing", signature, None);
+    pub fn missing(fetched_at: f64, record_key: String, signature: Option<String>) -> Self {
+        let mut dto = Self::empty("missing", signature, Some(record_key));
         dto.fetched_at = fetched_at;
         dto
     }
 
-    pub fn error(message: String, signature: Option<String>) -> Self {
+    pub fn error(code: &'static str, signature: Option<String>) -> Self {
         let mut dto = Self::empty("error", signature, None);
-        dto.message = Some(message);
+        dto.error = Some(code);
         dto
     }
 
@@ -112,7 +112,7 @@ impl LyricsDto {
 
         Self {
             state: "found",
-            key: signature,
+            signature,
             record_key: Some(record.key),
             synced: record.synced,
             offset: record.offset,
@@ -127,14 +127,14 @@ impl LyricsDto {
             fetched_at: record.fetched_at,
             updated_at: record.updated_at,
             original,
-            message: None,
+            error: None,
         }
     }
 
-    fn empty(state: &'static str, key: Option<String>, record_key: Option<String>) -> Self {
+    fn empty(state: &'static str, signature: Option<String>, record_key: Option<String>) -> Self {
         Self {
             state,
-            key,
+            signature,
             record_key,
             synced: false,
             offset: 0.0,
@@ -149,7 +149,7 @@ impl LyricsDto {
             fetched_at: 0.0,
             updated_at: 0.0,
             original: None,
-            message: None,
+            error: None,
         }
     }
 }
@@ -181,8 +181,10 @@ pub fn lyrics_from_view(view: &LyricsView, signature: Option<String>) -> LyricsD
         LyricsView::None => LyricsDto::none(signature),
         LyricsView::Loading { key } => LyricsDto::loading(key.clone(), signature),
         LyricsView::Found(record) => LyricsDto::found((**record).clone(), signature),
-        LyricsView::Missing { fetched_at } => LyricsDto::missing(*fetched_at, signature),
-        LyricsView::Error { message } => LyricsDto::error(message.clone(), signature),
+        LyricsView::Missing { key, fetched_at } => {
+            LyricsDto::missing(*fetched_at, key.clone(), signature)
+        }
+        LyricsView::Error { code } => LyricsDto::error(code, signature),
     }
 }
 

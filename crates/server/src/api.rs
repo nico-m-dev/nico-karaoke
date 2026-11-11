@@ -167,9 +167,13 @@ pub async fn delete_library_item(
     Ok(Json(OkResponse { ok: true }))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct EmptyRequest {}
+
 pub async fn restore_original(
     State(state): State<AppState>,
     Path(key): Path<String>,
+    ApiJson(_body): ApiJson<EmptyRequest>,
 ) -> Result<Json<LibraryItemResponse>, ApiError> {
     let record = state
         .watcher
@@ -250,7 +254,7 @@ pub struct SaveLyricsRequest {
     #[serde(default)]
     pub track_id: Option<String>,
     #[serde(default)]
-    pub key: Option<String>,
+    pub signature: Option<String>,
 }
 
 pub async fn save_current_lyrics(
@@ -266,7 +270,7 @@ pub async fn save_current_lyrics(
             source,
             body.original_text,
             body.track_id.as_deref(),
-            body.key.as_deref(),
+            body.signature.as_deref(),
         )
         .await
         .map_err(watcher_error)?;
@@ -280,7 +284,7 @@ pub async fn save_current_lyrics(
 pub struct OffsetRequest {
     pub offset: f64,
     #[serde(default)]
-    pub key: Option<String>,
+    pub signature: Option<String>,
 }
 
 pub async fn set_offset(
@@ -289,7 +293,7 @@ pub async fn set_offset(
 ) -> Result<Json<LibraryItemResponse>, ApiError> {
     let record = state
         .watcher
-        .set_offset(body.offset, body.key.as_deref())
+        .set_offset(body.offset, body.signature.as_deref())
         .await
         .map_err(watcher_error)?;
     Ok(Json(LibraryItemResponse {
@@ -313,7 +317,7 @@ pub struct FetchRequest {
     #[serde(default)]
     pub track_id: Option<String>,
     #[serde(default)]
-    pub key: Option<String>,
+    pub signature: Option<String>,
 }
 
 pub async fn fetch_lyrics(
@@ -332,7 +336,7 @@ pub async fn fetch_lyrics(
             return Err(api_error(StatusCode::CONFLICT, "track_changed"));
         }
     }
-    if let Some(expected) = body.key.as_deref() {
+    if let Some(expected) = body.signature.as_deref() {
         if !expected.is_empty()
             && snapshot
                 .as_ref()
@@ -407,13 +411,18 @@ pub async fn not_found() -> impl IntoResponse {
 
 pub async fn local_only(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if !is_local_request(&state.config, request.headers()) {
-        return api_error(StatusCode::FORBIDDEN, "forbidden_host").into_response();
+        return no_store_response(
+            api_error(StatusCode::FORBIDDEN, "forbidden_host").into_response(),
+        );
     }
     next.run(request).await
 }
 
 pub async fn no_store(request: Request, next: Next) -> Response {
-    let mut response = next.run(request).await;
+    no_store_response(next.run(request).await)
+}
+
+fn no_store_response(mut response: Response) -> Response {
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -467,7 +476,8 @@ fn is_local_request(config: &AppConfig, headers: &HeaderMap) -> bool {
                 return false;
             };
             if let Some(host) = uri.host() {
-                if !allowed_host(config, &host.to_ascii_lowercase()) {
+                let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+                if !allowed_host(config, &host) {
                     return false;
                 }
             }
@@ -527,6 +537,7 @@ fn watcher_error(error: WatcherError) -> ApiError {
         WatcherError::NoCurrentTrack => api_error(StatusCode::CONFLICT, "no_current_track"),
         WatcherError::TrackChanged => api_error(StatusCode::CONFLICT, "track_changed"),
         WatcherError::LyricsNotFound => api_error(StatusCode::NOT_FOUND, "lyrics_not_found"),
+        WatcherError::LyricsPending => api_error(StatusCode::SERVICE_UNAVAILABLE, "lyrics_pending"),
         WatcherError::NoOriginal => api_error(StatusCode::NOT_FOUND, "no_original"),
         WatcherError::InvalidValue => api_error(StatusCode::BAD_REQUEST, "invalid_value"),
         WatcherError::Library(error) => {
@@ -559,5 +570,17 @@ fn media_error(error: MediaError) -> ApiError {
         MediaError::NotSupported(_) => api_error(StatusCode::CONFLICT, "not_supported"),
         MediaError::InvalidValue(_) => api_error(StatusCode::BAD_REQUEST, "invalid_value"),
         MediaError::Backend(_) => api_error(StatusCode::BAD_GATEWAY, "player_error"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalises_bracketed_ipv6_hosts() {
+        assert_eq!(host_name("[::1]:8770"), "::1");
+        assert_eq!(host_name("localhost:8770"), "localhost");
+        assert_eq!(host_name("127.0.0.1"), "127.0.0.1");
     }
 }

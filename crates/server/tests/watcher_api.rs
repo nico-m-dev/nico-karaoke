@@ -481,6 +481,116 @@ async fn rejects_foreign_host_and_origin() {
 }
 
 #[tokio::test]
+async fn a_miss_is_scoped_to_the_track() {
+    let fixture = Fixture::new(
+        vec![snapshot("player", "Song A", "Artist")],
+        vec![
+            Ok(Vec::new()),
+            Ok(Vec::new()),
+            Ok(vec![lrclib_track(
+                2,
+                "Song B",
+                "Artist",
+                "[00:01.00]B line\n",
+            )]),
+        ],
+    );
+    fixture.watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(fixture.watcher.state().lyrics, LyricsView::Missing { .. }) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("first miss is recorded");
+
+    fixture
+        .provider
+        .set_snapshots(vec![snapshot("player", "Song B", "Artist")]);
+    fixture.watcher.tick().await;
+    fixture.wait_for_found().await;
+
+    let (status, body) = fixture.request(Method::GET, "/api/now", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["lyrics"]["state"], "found");
+    assert_eq!(body["lyrics"]["lines"][0]["text"], "B line");
+}
+
+#[tokio::test]
+async fn rejecting_foreign_host_is_no_store() {
+    let fixture = Fixture::new(vec![], vec![]);
+    let response = app(fixture.state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/api/now")
+                .header(header::HOST, "evil.example")
+                .body(Body::empty())
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+}
+
+#[tokio::test]
+async fn restore_requires_json_and_restores_the_original() {
+    let fixture = Fixture::new(vec![], vec![]);
+    let (status, body) = fixture
+        .request(
+            Method::POST,
+            "/api/library",
+            Some(json!({
+                "title": "Song",
+                "artist": "Artist",
+                "text": "[00:02.00]Edited\n",
+                "original_text": "[00:01.00]Original\n"
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let key = body["lyrics"]["record_key"]
+        .as_str()
+        .expect("record key")
+        .to_owned();
+
+    let response = app(fixture.state.clone())
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/library/{key}/original"))
+                .header(header::HOST, "127.0.0.1")
+                .header(header::ORIGIN, "null")
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from("x"))
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+
+    let (status, body) = fixture
+        .request(
+            Method::POST,
+            &format!("/api/library/{key}/original"),
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["lyrics"]["lines"][0]["text"], "Original");
+}
+
+#[tokio::test]
 async fn rejects_wrong_content_type_and_invalid_json() {
     let fixture = Fixture::new(vec![], vec![]);
 
