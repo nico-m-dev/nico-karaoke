@@ -8,7 +8,6 @@ export type LineHandlers = {
   commitTime: (id: string, value: string) => void;
   setText: (id: string, value: string) => void;
   remove: (id: string) => void;
-  editStart: (id: string) => void;
   editEnd: (id: string) => void;
 };
 
@@ -43,7 +42,6 @@ export function renderLines(
     time.spellcheck = false;
     time.value = formatTimecode(line.t);
     time.setAttribute("aria-label", t(language, "studio.line_time", { index: index + 1 }));
-    time.addEventListener("focus", () => handlers.editStart(line.id));
     time.addEventListener("blur", () => handlers.editEnd(line.id));
     time.addEventListener("change", () => handlers.commitTime(line.id, time.value));
 
@@ -54,7 +52,6 @@ export function renderLines(
     text.value = line.text;
     text.placeholder = t(language, "studio.text_placeholder");
     text.setAttribute("aria-label", t(language, "studio.line_text", { index: index + 1 }));
-    text.addEventListener("focus", () => handlers.editStart(line.id));
     text.addEventListener("blur", () => handlers.editEnd(line.id));
     text.addEventListener("input", () => handlers.setText(line.id, text.value));
 
@@ -224,7 +221,6 @@ export type InspectorState = {
   canTakeTime: boolean;
   canPreview: boolean;
   previewing: boolean;
-  readOnly: boolean;
 };
 
 export type InspectorHandlers = {
@@ -283,7 +279,7 @@ export function renderInspector(
     nudges.className = "inspector-nudges";
     for (const delta of NUDGES) {
       const button = ghostButton(formatDelta(delta));
-      button.disabled = line.t === null || state.readOnly;
+      button.disabled = line.t === null;
       button.title = t(state.language, "studio.inspector.nudge_by", {
         value: formatDelta(delta),
       });
@@ -296,7 +292,7 @@ export function renderInspector(
     actions.className = "inspector-actions";
 
     const take = ghostButton(t(state.language, "studio.inspector.take_time"));
-    take.disabled = !state.canTakeTime || state.readOnly;
+    take.disabled = !state.canTakeTime;
     take.addEventListener("click", handlers.takeTime);
     actions.append(take);
 
@@ -306,7 +302,7 @@ export function renderInspector(
         state.previewing ? "studio.inspector.previewing" : "studio.inspector.preview",
       ),
     );
-    previewButton.disabled = !state.canPreview || state.readOnly || line.t === null;
+    previewButton.disabled = !state.canPreview || line.t === null;
     previewButton.addEventListener("click", handlers.preview);
     actions.append(previewButton);
 
@@ -316,24 +312,15 @@ export function renderInspector(
         isMusicMarker(line.text) ? "studio.inspector.music_off" : "studio.inspector.music_on",
       ),
     );
-    music.disabled = state.readOnly;
     music.addEventListener("click", handlers.toggleMusic);
     actions.append(music);
 
     const remove = ghostButton(t(state.language, "studio.inspector.delete"));
     remove.classList.add("danger");
-    remove.disabled = state.readOnly;
     remove.addEventListener("click", handlers.remove);
     actions.append(remove);
 
     children.push(actions);
-
-    if (state.readOnly) {
-      const readOnly = document.createElement("p");
-      readOnly.className = "hint";
-      readOnly.textContent = t(state.language, "studio.read_only");
-      children.push(readOnly);
-    }
   }
 
   const tap = ghostButton(t(state.language, "studio.inspector.tap"));

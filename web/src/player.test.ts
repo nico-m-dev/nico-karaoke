@@ -120,6 +120,24 @@ describe("playback anchor", () => {
     expect(updated.pos).toBe(14);
   });
 
+  it("keeps a paused anchor still instead of extrapolating it forward", () => {
+    const previous: Anchor = { pos: 5, at: 0, playing: false, rate: 1, ok: true };
+    const updated = updateAnchor(previous, true, 5.01, false, 1, 5000);
+    expect(updated.pos).toBeCloseTo(5.0025);
+    expect(updated.playing).toBe(false);
+  });
+
+  it("snaps to the server position when playback starts or stops", () => {
+    const playing: Anchor = { pos: 10, at: 0, playing: true, rate: 1, ok: true };
+    const paused = updateAnchor(playing, true, 10.2, false, 1, 2000);
+    expect(paused.pos).toBe(10.2);
+    expect(paused.playing).toBe(false);
+
+    const resumed = updateAnchor(paused, true, 10.3, true, 1, 3000);
+    expect(resumed.pos).toBe(10.3);
+    expect(resumed.playing).toBe(true);
+  });
+
   it("returns a live position only when the anchor is valid", () => {
     const anchor: Anchor = { pos: 10, at: 1000, playing: true, rate: 2, ok: true };
     expect(positionAt(anchor, 2000)).toBe(12);

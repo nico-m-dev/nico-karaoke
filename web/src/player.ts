@@ -127,7 +127,12 @@ export function updateAnchor(
     return { pos: target, at: now, playing, rate: safeRate, ok: true };
   }
 
-  const predicted = previous.pos + ((now - previous.at) / 1000) * previous.rate;
+  if (previous.playing !== playing) {
+    return { pos: target, at: now, playing, rate: safeRate, ok: true };
+  }
+
+  const predicted =
+    previous.pos + (previous.playing ? ((now - previous.at) / 1000) * previous.rate : 0);
   const drift = target - predicted;
   let corrected: number;
 

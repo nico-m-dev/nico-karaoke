@@ -199,6 +199,23 @@ export function getLibraryItem(key: string): Promise<LibraryItemResponse> {
   return request<LibraryItemResponse>(`/api/library/${encodeURIComponent(key)}`);
 }
 
+export function saveCurrentLyrics(
+  text: string,
+  trackId?: string,
+  signature?: string,
+): Promise<LibraryItemResponse> {
+  return request<LibraryItemResponse>("/api/lyrics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      source: "manual",
+      ...(trackId ? { track_id: trackId } : {}),
+      ...(signature ? { signature } : {}),
+    }),
+  });
+}
+
 export function saveLibraryItem(
   key: string,
   text: string,

@@ -109,7 +109,6 @@
   "studio.inspector.music_off": "Make lyric line",
   "studio.inspector.delete": "Delete line",
   "studio.inspector.tap": "Tap mode",
-  "studio.read_only": "This item is read-only.",
   "studio.invalid_time": "Use a time like 01:23.45.",
   "studio.notice.migrated": "Legacy [end:] tags were converted to ♪ markers. Save to keep the migration.",
   "studio.notice.current_missing": "No saved lyrics for the current track yet. Fetch them to start editing.",
@@ -143,5 +142,8 @@
   "studio.language": "Language",
   "player.error.no_position": "The player has no position yet.",
   "studio.not_playing": "—",
-  "studio.fetching": "Fetching…"
+  "studio.fetching": "Fetching…",
+  "studio.playback": "Playback",
+  "studio.line_count_one": "1 line",
+  "studio.notice.track_changed": "The track changed. This document belongs to the previous track; reload the Studio to edit the new one."
 }

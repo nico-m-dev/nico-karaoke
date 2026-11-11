@@ -7,6 +7,7 @@ import {
   getNow,
   parseLyrics,
   restoreLibraryOriginal,
+  saveCurrentLyrics,
   saveLibraryItem,
   seekTo as seekPlayer,
   setPlayback,
@@ -134,6 +135,8 @@ const timelineElements: TimelineElements = {
 let language: Language = detectLanguage();
 let booted = false;
 let key: string | null = null;
+let boundTrackId: string | null = null;
+let boundSignature: string | null = null;
 let item: LibraryItemResponse | null = null;
 let now: Now | null = null;
 let lines: EditorLine[] = [];
@@ -211,12 +214,15 @@ async function loadCurrent(): Promise<void> {
     const state = await getNow();
     now = state;
     updateAnchorFrom(state);
-    if (state.lyrics.record_key) {
+    if (state.lyrics.state === "found" && state.lyrics.record_key) {
       await loadItem(state.lyrics.record_key);
       return;
     }
+    fatalMessage = null;
     key = null;
     item = null;
+    boundTrackId = state.track?.track_id ?? null;
+    boundSignature = state.lyrics.signature;
     lines = [];
     selectedId = null;
     dirty = false;
@@ -243,6 +249,8 @@ function applyItem(result: LibraryItemResponse): void {
   fatalMessage = null;
   const recordKey = result.lyrics.record_key;
   key = recordKey ?? key;
+  boundTrackId = null;
+  boundSignature = null;
   item = result;
   const adopted = makeEditorLines(result.lyrics.lines);
   lines = adopted.lines;
@@ -261,6 +269,8 @@ function applyItem(result: LibraryItemResponse): void {
 function showFatal(message: string): void {
   fatalMessage = message;
   key = null;
+  boundTrackId = null;
+  boundSignature = null;
   item = null;
   lines = [];
   selectedId = null;
@@ -293,17 +303,18 @@ function renderHeader(): void {
   ].filter(Boolean);
   els.subtitle.textContent = parts.join(" · ");
 
-  const text = !item
-    ? ""
-    : busy
-      ? t(language, "studio.saving")
-      : dirty
-        ? t(language, "studio.unsaved")
-        : t(language, "studio.saved");
+  const text =
+    !item && lines.length === 0
+      ? ""
+      : busy
+        ? t(language, fetching ? "studio.fetching" : "studio.saving")
+        : dirty
+          ? t(language, "studio.unsaved")
+          : t(language, "studio.saved");
   els.saveState.textContent = text;
   els.saveState.classList.toggle("dirty", dirty && !busy);
 
-  els.save.disabled = !key || !dirty || busy;
+  els.save.disabled = (!key && !now?.track) || !dirty || busy;
   els.undo.disabled = undoStack.length === 0 || busy;
   els.fetch.disabled = busy || fetching || (!key && !now?.track);
   els.fetch.textContent = t(language, fetching ? "studio.fetching" : "studio.fetch");
@@ -323,6 +334,8 @@ function updateNotice(): void {
     message = t(language, "studio.notice.migrated");
   } else if (!now?.track) {
     message = t(language, "studio.notice.no_track");
+  } else if (!key && boundTrackId && !isCurrent()) {
+    message = t(language, "studio.notice.track_changed");
   } else if (!key) {
     message = t(language, "studio.notice.current_missing");
   } else if (!isCurrent()) {
@@ -356,7 +369,10 @@ function renderTransport(): void {
 
 function renderLineList(): void {
   const count = lines.length;
-  els.lineCount.textContent = t(language, "studio.line_count", { count });
+  els.lineCount.textContent =
+    count === 1
+      ? t(language, "studio.line_count_one")
+      : t(language, "studio.line_count", { count });
   els.linesEmpty.hidden = count > 0;
   renderLines(els.lineList, lines, selectedId, language, lineHandlers);
 }
@@ -386,7 +402,6 @@ function renderInspectorView(): void {
       canTakeTime: isCurrent() && livePosition() !== null,
       canPreview: isCurrent() && Boolean(now?.track?.can_seek),
       previewing,
-      readOnly: false,
     },
     inspectorHandlers,
   );
@@ -398,7 +413,11 @@ function updateDirty(): void {
 }
 
 async function save(): Promise<void> {
-  if (!key || busy) {
+  if (busy) {
+    return;
+  }
+  if (!key && !now?.track) {
+    showToast(t(language, "studio.notice.no_track"));
     return;
   }
   const text = serializeLines(lines);
@@ -409,11 +428,17 @@ async function save(): Promise<void> {
   busy = true;
   renderHeader();
   try {
-    const updated = await saveLibraryItem(key, text);
+    const updated = key ? await saveLibraryItem(key, text) : await saveCurrentLyrics(text);
+    key = updated.lyrics.record_key ?? key;
+    boundTrackId = null;
+    boundSignature = null;
     item = { ...updated, current: isCurrent() };
+    fatalMessage = null;
     dirty = false;
     migratedNotice = false;
     undoStack = [];
+    editSnapshot = null;
+    await refreshNow().catch(() => undefined);
     renderStructure();
     focusRow(selectedId);
     showToast(t(language, "player.library.saved"));
@@ -561,6 +586,9 @@ function commitLineTime(id: string, value: string): void {
 }
 
 function setLineText(id: string, value: string): void {
+  if (!editSnapshot) {
+    editSnapshot = snapshot();
+  }
   lines = updateLine(lines, id, { text: value });
   dirty = true;
   renderTimelineView();
@@ -582,19 +610,11 @@ function removeLine(id: string): void {
   }
 }
 
-function beginEdit(id: string): void {
-  if (!editSnapshot) {
-    editSnapshot = snapshot();
-  }
-  void id;
-}
-
 function endEdit(id: string): void {
   if (!editSnapshot) {
     return;
   }
   const changed =
-    editSnapshot.selectedId !== selectedId ||
     editSnapshot.lines.length !== lines.length ||
     editSnapshot.lines.some((line, index) => {
       const current = lines[index];
@@ -615,7 +635,6 @@ const lineHandlers = {
   commitTime: commitLineTime,
   setText: setLineText,
   remove: removeLine,
-  editStart: beginEdit,
   editEnd: endEdit,
 };
 
@@ -763,9 +782,6 @@ function startTapRun(): void {
       window.clearInterval(tapTimer);
       tapTimer = null;
     }
-    tapPhase = "tapping";
-    updateTapUI();
-    els.tapTap.focus();
     void beginTapping();
   }, 1000);
 }
@@ -781,7 +797,16 @@ async function beginTapping(): Promise<void> {
       ok: true,
     };
     await setPlayback("play");
+    if (tapPhase !== "countdown") {
+      return;
+    }
+    tapPhase = "tapping";
+    updateTapUI();
+    els.tapTap.focus();
   } catch (error) {
+    if (tapPhase === null) {
+      return;
+    }
     showToast(errorMessage(language, error));
     finishTap(false);
   }
@@ -1293,7 +1318,14 @@ async function poll(): Promise<void> {
   pollBusy = true;
   try {
     await refreshNow();
-    if (!key && !fatalMessage && now?.lyrics.record_key && lines.length === 0 && !busy) {
+    if (
+      !key &&
+      !fatalMessage &&
+      now?.lyrics.state === "found" &&
+      now.lyrics.record_key &&
+      lines.length === 0 &&
+      !busy
+    ) {
       await loadItem(now.lyrics.record_key);
     }
   } catch {
@@ -1309,9 +1341,6 @@ async function refreshNow(): Promise<void> {
   updateAnchorFrom(state);
   renderTransport();
   renderHeader();
-  if (!key && !fatalMessage && state.lyrics.record_key && lines.length === 0 && !busy) {
-    await loadItem(state.lyrics.record_key);
-  }
 }
 
 function updateAnchorFrom(state: Now): void {
@@ -1352,7 +1381,19 @@ function stopAnchor(): void {
 }
 
 function isCurrent(): boolean {
-  return Boolean(key && now?.lyrics.record_key === key);
+  if (fatalMessage) {
+    return false;
+  }
+  if (key) {
+    return now?.lyrics.record_key === key;
+  }
+  if (!boundTrackId || !now?.track) {
+    return false;
+  }
+  return (
+    now.track.track_id === boundTrackId &&
+    (boundSignature === null || now.lyrics.signature === boundSignature)
+  );
 }
 
 function livePosition(): number | null {

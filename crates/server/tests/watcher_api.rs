@@ -385,7 +385,8 @@ async fn fetch_apply_replaces_a_manual_text_and_keeps_the_original() {
                 "title": "Song",
                 "artist": "Artist",
                 "text": "[00:01.00]Manual\n",
-                "source": "manual"
+                "source": "manual",
+                "original_text": "[00:01.00]Manual original\n"
             })),
         )
         .await;
@@ -406,8 +407,13 @@ async fn fetch_apply_replaces_a_manual_text_and_keeps_the_original() {
 
     let stored = fixture.library.get(&key).expect("item is stored");
     assert!(stored.text.contains("Fetched"));
-    assert!(!stored.text.contains("Manual"));
-    assert!(stored.original.is_some());
+    assert!(!stored.text.contains("Manual original"));
+    let original = stored.original.expect("original is kept");
+    assert!(
+        original.text.contains("Manual original"),
+        "the first original must survive a later fetch: {}",
+        original.text
+    );
 }
 
 #[tokio::test]

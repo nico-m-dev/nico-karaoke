@@ -428,6 +428,19 @@ impl Watcher {
         self: &Arc<Self>,
         mut record: LyricRecord,
     ) -> Result<LyricRecord, WatcherError> {
+        if let Some(existing) = self.library.get(&record.key) {
+            // Keep the first stored original; a later fetch must not replace it.
+            if existing.original.is_some() {
+                record.original = existing.original;
+            }
+            record.offset = existing.offset;
+            if record.album.trim().is_empty() {
+                record.album = existing.album;
+            }
+            if record.duration.is_none() {
+                record.duration = existing.duration;
+            }
+        }
         record.updated_at = 0.0;
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();

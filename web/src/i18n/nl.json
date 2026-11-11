@@ -109,7 +109,6 @@
   "studio.inspector.music_off": "Tekstregel maken",
   "studio.inspector.delete": "Regel verwijderen",
   "studio.inspector.tap": "Meetikken",
-  "studio.read_only": "Dit item is alleen-lezen.",
   "studio.invalid_time": "Gebruik een tijd zoals 01:23.45.",
   "studio.notice.migrated": "Oude [end:]-tags zijn omgezet naar ♪-markeringen. Sla op om de migratie te bewaren.",
   "studio.notice.current_missing": "Voor de huidige track is nog geen tekst opgeslagen. Haal de tekst op om te beginnen.",
@@ -143,5 +142,8 @@
   "studio.language": "Taal",
   "player.error.no_position": "De speler heeft nog geen positie.",
   "studio.not_playing": "—",
-  "studio.fetching": "Ophalen…"
+  "studio.fetching": "Ophalen…",
+  "studio.playback": "Afspelen",
+  "studio.line_count_one": "1 regel",
+  "studio.notice.track_changed": "De track is gewijzigd. Dit document hoort bij de vorige track; herlaad de Studio om de nieuwe te bewerken."
 }
