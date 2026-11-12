@@ -335,8 +335,8 @@ body[data-state="playing"] .idle {
 
 .mark-wrap {
   position: relative;
-  width: clamp(6.4rem, 17vw, 8.8rem);
-  margin: 0 auto 1.4rem;
+  width: clamp(5.6rem, 14vw, 7.2rem);
+  margin: 0 auto 1.2rem;
   isolation: isolate;
 }
 
@@ -365,9 +365,9 @@ body[data-state="playing"] .idle {
 .eyebrow {
   margin: 0 0 0.8rem;
   color: var(--accent);
-  font-size: 0.72rem;
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
   font-weight: 750;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 
