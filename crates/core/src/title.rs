@@ -73,11 +73,13 @@ pub fn split_title(title: &str, artist: &str) -> (String, String) {
     let artist_key = normalize(&cleaned_artist);
     let left_key = normalize(left);
 
-    if channelish
-        || artist_key.is_empty()
-        || left_key.contains(&artist_key)
-        || artist_key.contains(&left_key)
-    {
+    // A one-character left side ("A - B", "O - ...") would match almost any artist name, so
+    // only treat a longer left side as the artist. Channel-style titles still split without an
+    // artist, because that is the only way to recover the artist from the metadata.
+    let left_matches_artist = left_key.contains(&artist_key)
+        || (left_key.chars().count() >= 2 && artist_key.contains(&left_key));
+
+    if channelish || artist_key.is_empty() || left_matches_artist {
         (right.to_owned(), strip_channel(left))
     } else {
         (cleaned_title, cleaned_artist)
@@ -151,6 +153,18 @@ mod tests {
         assert_eq!(
             split_title("Song - Live", "Someone Else"),
             ("Song - Live".to_owned(), "Someone Else".to_owned())
+        );
+    }
+
+    #[test]
+    fn does_not_split_a_one_letter_title_fragment_that_matches_the_artist() {
+        assert_eq!(
+            split_title("A - B", "Cat Stevens"),
+            ("A - B".to_owned(), "Cat Stevens".to_owned())
+        );
+        assert_eq!(
+            split_title("O - Burning", "Foo Fighters"),
+            ("O - Burning".to_owned(), "Foo Fighters".to_owned())
         );
     }
 

@@ -57,6 +57,14 @@ impl LyricLine {
 pub struct LrcDocument {
     pub synced: bool,
     pub lines: Vec<LyricLine>,
+    /// Metadata tags such as `[ar:]`, `[ti:]`, and `[al:]`. `[offset:]` is deliberately not
+    /// kept because its value is applied to the timestamps while parsing.
+    #[serde(default)]
+    pub metadata: Vec<String>,
+    /// Untimed, non-metadata lines from a mixed document. They are preserved on save but not
+    /// shown as timed lyrics.
+    #[serde(default)]
+    pub extras: Vec<String>,
 }
 
 impl LrcDocument {
@@ -65,7 +73,7 @@ impl LrcDocument {
     }
 
     pub fn to_lrc(&self) -> String {
-        to_lrc(&self.lines)
+        to_lrc(&self.metadata, &self.extras, &self.lines)
     }
 
     pub fn line_count(&self) -> usize {
@@ -89,6 +97,7 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
     let mut offset = 0.0;
     let mut timed = Vec::new();
     let mut plain = Vec::new();
+    let mut metadata = Vec::new();
 
     for raw in text.lines() {
         let line = raw.trim_start_matches('\u{feff}').trim();
@@ -106,6 +115,8 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
                         offset = milliseconds as f64 / 1000.0;
                     }
                 }
+            } else {
+                metadata.push(line.to_owned());
             }
             continue;
         }
@@ -184,6 +195,8 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
         LrcDocument {
             synced: false,
             lines: plain,
+            metadata,
+            extras: Vec::new(),
         }
     } else {
         timed.sort_by(|left, right| {
@@ -191,20 +204,38 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
                 .unwrap_or_default()
                 .total_cmp(&right.t.unwrap_or_default())
         });
+        // Untimed lines in a mixed document are not displayed as lyrics, but they are kept so
+        // a Studio save does not silently delete headers or credits.
+        let extras = plain.into_iter().map(|line| line.text).collect();
         LrcDocument {
             synced: true,
             lines: timed,
+            metadata,
+            extras,
         }
     }
 }
 
-/// Write lines back to LRC. Legacy end tags are preserved until the Studio migrates them.
-pub fn to_lrc(lines: &[LyricLine]) -> String {
+/// Write metadata and lines back to LRC. Legacy end tags are preserved until the Studio
+/// migrates them. `[offset:]` is not written because it was applied while parsing.
+pub fn to_lrc(metadata: &[String], extras: &[String], lines: &[LyricLine]) -> String {
+    let mut output = String::new();
+    for line in metadata {
+        if !line.trim().is_empty() {
+            output.push_str(line.trim());
+            output.push('\n');
+        }
+    }
+    for line in extras {
+        if !line.trim().is_empty() {
+            output.push_str(line.trim());
+            output.push('\n');
+        }
+    }
     if lines.is_empty() {
-        return String::new();
+        return output;
     }
 
-    let mut output = String::new();
     for line in lines {
         if let Some(time) = line.t {
             output.push('[');
@@ -278,6 +309,7 @@ mod tests {
         assert_eq!(document.lines[0].t, Some(1.5));
         assert_eq!(document.lines[0].text, "First");
         assert_eq!(document.lines[1].t, Some(3.0));
+        assert_eq!(document.metadata, vec!["[ar:Artist]", "[ti:Title]"]);
     }
 
     #[test]
@@ -369,9 +401,36 @@ mod tests {
         let document = LrcDocument {
             synced: false,
             lines: vec![LyricLine::plain("First"), LyricLine::plain("Second")],
+            metadata: Vec::new(),
+            extras: Vec::new(),
         };
 
         assert_eq!(document.to_lrc(), "First\nSecond\n");
+    }
+
+    #[test]
+    fn keeps_untimed_lines_in_a_mixed_document() {
+        let document = parse_lrc("Intro text\n[00:01.00]First\n");
+        assert!(document.synced);
+        assert_eq!(document.lines.len(), 1);
+        assert_eq!(document.extras, vec!["Intro text"]);
+
+        let text = document.to_lrc();
+        assert!(text.starts_with("Intro text\n"));
+        assert_eq!(parse_lrc(&text).extras, vec!["Intro text"]);
+    }
+
+    #[test]
+    fn keeps_metadata_when_writing_and_does_not_double_apply_offset() {
+        let document = parse_lrc("[ar:Artist]\n[offset:+500]\n[00:01.00]First\n");
+        let text = document.to_lrc();
+
+        assert!(text.contains("[ar:Artist]"));
+        assert!(!text.contains("[offset:"));
+
+        let reparsed = parse_lrc(&text);
+        assert_eq!(reparsed.lines[0].t, Some(1.5));
+        assert_eq!(reparsed.metadata, vec!["[ar:Artist]"]);
     }
 
     #[test]

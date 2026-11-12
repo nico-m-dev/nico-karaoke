@@ -7,10 +7,11 @@ use thiserror::Error;
 
 use crate::library::{LIBRARY_VERSION, LyricRecord, LyricsSource, OriginalLyrics, normalize_text};
 use crate::lyrics::parse_lrc;
-use crate::title::{record_key, split_title};
+use crate::title::{normalize, record_key, split_title};
 
 pub const MISS_TTL_SECONDS: f64 = 3600.0;
 pub const DURATION_TOLERANCE_SECONDS: f64 = 5.0;
+const MISS_CACHE_LIMIT: usize = 2048;
 
 /// One track returned by LRCLIB. Unknown fields are ignored so the API can grow without
 /// breaking the app.
@@ -246,7 +247,16 @@ impl LyricsLookup {
 
         if !exact.iter().any(LrclibTrack::has_synced) {
             match self.client.search(&without_album).await {
-                Ok(items) => add_candidates(&mut searched, items, &mut seen),
+                Ok(items) => {
+                    // Search results are fuzzy. Keep only results whose title and artist are
+                    // related to the requested track; otherwise a cover or a different song
+                    // with a coincidentally similar duration can win.
+                    let related: Vec<_> = items
+                        .into_iter()
+                        .filter(|item| related_to(item, track))
+                        .collect();
+                    add_candidates(&mut searched, related, &mut seen);
+                }
                 Err(error) => errors.push(error),
             }
         }
@@ -302,10 +312,29 @@ impl LyricsLookup {
     }
 
     fn remember_miss(&self, key: String, now: f64) {
-        self.misses
+        let mut misses = self
+            .misses
             .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(key, now);
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // A long session can otherwise remember every track it has ever seen. Sweep expired
+        // entries, then drop the oldest half if the cache is still at its limit.
+        if misses.len() >= MISS_CACHE_LIMIT {
+            misses.retain(|_, fetched_at| {
+                now >= *fetched_at && now - *fetched_at <= self.miss_ttl_seconds
+            });
+            if misses.len() >= MISS_CACHE_LIMIT {
+                let mut entries: Vec<(String, f64)> = misses
+                    .iter()
+                    .map(|(key, fetched_at)| (key.clone(), *fetched_at))
+                    .collect();
+                entries.sort_by(|left, right| left.1.total_cmp(&right.1));
+                let remove_count = misses.len() / 2;
+                for (key, _) in entries.into_iter().take(remove_count) {
+                    misses.remove(&key);
+                }
+            }
+        }
+        misses.insert(key, now);
     }
 }
 
@@ -361,6 +390,39 @@ fn near(item: &LrclibTrack, duration: Option<f64>) -> bool {
     duration.is_none() || distance(item, duration) <= DURATION_TOLERANCE_SECONDS
 }
 
+/// Whether a fuzzy search result is plausibly the requested song. This is deliberately more
+/// generous than an exact key match, but it rejects unrelated titles and artists.
+fn related_to(item: &LrclibTrack, track: &TrackQuery) -> bool {
+    let (query_title, query_artist) = split_title(&track.title, &track.artist);
+    let (item_title, item_artist) = split_title(&item.track_name, &item.artist_name);
+    let query_title = normalize(&query_title);
+    let item_title = normalize(&item_title);
+    if query_title.is_empty() || item_title.is_empty() {
+        return false;
+    }
+
+    let (shorter, longer) = if item_title.chars().count() <= query_title.chars().count() {
+        (&item_title, &query_title)
+    } else {
+        (&query_title, &item_title)
+    };
+    let title_matches = item_title == query_title
+        || (shorter.chars().count() >= 3 && longer.contains(shorter.as_str()));
+    if !title_matches {
+        return false;
+    }
+
+    let query_artist = normalize(&query_artist);
+    if query_artist.is_empty() {
+        return true;
+    }
+    let item_artist = normalize(&item_artist);
+    item_artist.is_empty()
+        || item_artist == query_artist
+        || item_artist.contains(&query_artist)
+        || query_artist.contains(&item_artist)
+}
+
 fn select<'a>(
     exact: &'a [LrclibTrack],
     searched: &'a [LrclibTrack],
@@ -370,13 +432,12 @@ fn select<'a>(
         return Some(item);
     }
 
-    let mut synced_near: Vec<&LrclibTrack> = searched
+    // LRCLIB already returns search results in relevance order. Keep that order and use the
+    // duration only to reject results, instead of re-ranking by duration.
+    if let Some(item) = searched
         .iter()
-        .filter(|item| item.has_synced() && near(item, duration))
-        .collect();
-    synced_near
-        .sort_by(|left, right| distance(left, duration).total_cmp(&distance(right, duration)));
-    if let Some(item) = synced_near.first() {
+        .find(|item| item.has_synced() && near(item, duration))
+    {
         return Some(item);
     }
 
@@ -384,18 +445,7 @@ fn select<'a>(
         return Some(item);
     }
 
-    let mut usable_near: Vec<&LrclibTrack> = searched
-        .iter()
-        .filter(|item| near(item, duration))
-        .collect();
-    usable_near.sort_by(|left, right| {
-        let left_synced = u8::from(!left.has_synced());
-        let right_synced = u8::from(!right.has_synced());
-        left_synced
-            .cmp(&right_synced)
-            .then_with(|| distance(left, duration).total_cmp(&distance(right, duration)))
-    });
-    usable_near.first().copied()
+    searched.iter().find(|item| near(item, duration))
 }
 
 fn record_from(item: &LrclibTrack, track: &TrackQuery, now: f64) -> LyricRecord {
@@ -427,6 +477,8 @@ fn record_from(item: &LrclibTrack, track: &TrackQuery, now: f64) -> LyricRecord 
         offset: 0.0,
         text,
         lines: document.lines,
+        metadata: document.metadata,
+        extras: document.extras,
         lrclib_id: item.id,
         fetched_at: now,
         updated_at: now,
@@ -714,6 +766,62 @@ mod tests {
             .expect("lookup works");
 
         assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1000.0 });
+    }
+
+    #[tokio::test]
+    async fn ignores_search_results_with_a_different_title() {
+        let wrong = track(
+            1,
+            "Totally Different",
+            "Artist",
+            180.0,
+            Some("[00:01.00]Wrong\n"),
+            None,
+        );
+        let client = FakeClient::new(vec![Ok(Vec::new()), Ok(Vec::new())], vec![Ok(vec![wrong])]);
+        let lookup = LyricsLookup::new(client);
+
+        let outcome = lookup
+            .lookup_at(&track_query(180.0), 1000.0)
+            .await
+            .expect("lookup works");
+
+        assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1000.0 });
+    }
+
+    #[tokio::test]
+    async fn accepts_a_search_result_with_a_parenthetical_title() {
+        let item = track(
+            2,
+            "Hey (Live)",
+            "Artist",
+            181.0,
+            Some("[00:01.00]Live\n"),
+            None,
+        );
+        let client = FakeClient::new(vec![Ok(Vec::new()), Ok(Vec::new())], vec![Ok(vec![item])]);
+        let lookup = LyricsLookup::new(client);
+
+        let outcome = lookup
+            .lookup_at(
+                &TrackQuery::new("Hey", "Artist", "Album", Some(180.0)),
+                1000.0,
+            )
+            .await
+            .expect("lookup works");
+
+        assert!(matches!(outcome, LookupOutcome::Found(_)));
+    }
+
+    #[test]
+    fn caps_the_miss_cache() {
+        let lookup = LyricsLookup::new(FakeClient::new(Vec::new(), Vec::new()));
+        for index in 0..(MISS_CACHE_LIMIT + 100) {
+            lookup.remember_miss(format!("key-{index}"), 1000.0);
+        }
+
+        let size = lookup.misses.read().expect("miss cache").len();
+        assert!(size <= MISS_CACHE_LIMIT);
     }
 
     #[tokio::test]

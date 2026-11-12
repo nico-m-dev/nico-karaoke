@@ -61,6 +61,12 @@ pub struct LyricRecord {
     pub text: String,
     #[serde(skip, default)]
     pub lines: Vec<LyricLine>,
+    /// Metadata tags from the working text. Derived on load and save, never stored twice.
+    #[serde(skip, default)]
+    pub metadata: Vec<String>,
+    /// Untimed non-metadata lines from a mixed working text. Derived, never stored twice.
+    #[serde(skip, default)]
+    pub extras: Vec<String>,
     #[serde(default)]
     pub lrclib_id: Option<i64>,
     #[serde(default)]
@@ -90,6 +96,8 @@ impl LyricRecord {
             offset: 0.0,
             text: text.into(),
             lines: Vec::new(),
+            metadata: Vec::new(),
+            extras: Vec::new(),
             lrclib_id: None,
             fetched_at: 0.0,
             updated_at: 0.0,
@@ -362,6 +370,9 @@ impl Library {
         let path = self.path_for(&shaped);
         fs::create_dir_all(&self.dir)?;
 
+        // Write the human-readable text first. If the process dies before the JSON write, the
+        // next open treats the .lrc as a manual edit and the working text is not lost. Each
+        // file is atomic on its own; the pair is eventually consistent, not transactional.
         write_atomic(&path.with_extension("lrc"), &shaped.text)?;
         let payload = serde_json::to_string_pretty(&shaped)? + "\n";
         write_atomic(&path, &payload)?;
@@ -479,6 +490,8 @@ fn shape(mut record: LyricRecord) -> Result<LyricRecord, LibraryError> {
         .duration
         .filter(|duration| duration.is_finite() && *duration > 0.0);
     record.synced = document.synced;
+    record.metadata = document.metadata;
+    record.extras = document.extras;
     record.lines = document.lines;
     record.text = text;
     record.offset = if record.offset.is_finite() {
@@ -524,10 +537,19 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), LibraryError> {
     temporary
         .persist(path)
         .map_err(|error| LibraryError::Io(error.error))?;
+
+    // Persist the rename itself, not just the file contents. Opening a directory is only
+    // supported on Unix; on Windows the rename is durable enough for this app's needs.
+    #[cfg(unix)]
+    if let Ok(directory) = fs::File::open(parent) {
+        let _ = directory.sync_all();
+    }
     Ok(())
 }
 
 fn remove_pair(path: &Path) -> Result<(), LibraryError> {
+    // The .lrc goes first: if the second removal fails, the JSON still carries the text and
+    // the record remains recoverable instead of losing the working file.
     for target in [path.with_extension("lrc"), path.to_path_buf()] {
         match fs::remove_file(&target) {
             Ok(()) => {}
