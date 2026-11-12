@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 
 use anyhow::{Context, anyhow};
-use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, USAGE};
+use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError};
 use nico_karaoke_server::{logging, runtime};
 use tauri::webview::NewWindowResponse;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -11,26 +11,34 @@ use tracing_appender::non_blocking::WorkerGuard;
 
 struct LogGuard(#[allow(dead_code)] Mutex<Option<WorkerGuard>>);
 
+const DESKTOP_USAGE: &str = "Usage: nico-karaoke-desktop [options]\n\nOptions:\n  --host <ip>     Address to bind (default 127.0.0.1; localhost is accepted)\n  --port <port>   First port to try (default 8770)\n  -h, --help      Show usage\n  -V, --version   Show the version";
+
 /// The shell only loads a local page. The override exists for Vite HMR, not remote content.
 fn open_external(url: &tauri::Url) {
     if !matches!(url.scheme(), "http" | "https") {
         return;
     }
 
-    #[cfg(target_os = "linux")]
-    let mut command = std::process::Command::new("xdg-open");
-    #[cfg(target_os = "macos")]
-    let mut command = std::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = std::process::Command::new("rundll32");
-        command.arg("url.dll,FileProtocolHandler");
-        command
-    };
-    command.arg(url.as_str());
-    if let Err(error) = command.spawn() {
-        tracing::warn!(error = %error, "could not open the external link");
-    }
+    let url = url.to_string();
+    std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        let mut command = std::process::Command::new("xdg-open");
+        #[cfg(target_os = "macos")]
+        let mut command = std::process::Command::new("open");
+        #[cfg(target_os = "windows")]
+        let mut command = {
+            let mut command = std::process::Command::new("rundll32");
+            command.arg("url.dll,FileProtocolHandler");
+            command
+        };
+        match command.arg(&url).status() {
+            Ok(status) if !status.success() => {
+                tracing::warn!(%status, "external opener failed");
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(error = %error, "could not open the external link"),
+        }
+    });
 }
 
 fn local_view_url(raw: &str) -> anyhow::Result<tauri::Url> {
@@ -47,7 +55,7 @@ fn main() {
     let config = match AppConfig::from_env() {
         Ok(config) => config,
         Err(ConfigError::Help) => {
-            println!("{USAGE}");
+            println!("{DESKTOP_USAGE}");
             return;
         }
         Err(ConfigError::Version) => {
