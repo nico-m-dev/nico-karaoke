@@ -128,7 +128,6 @@
   "studio.tap.stopped": "Tapping stopped.",
   "studio.tap.needs_seek": "Tap mode needs a player that supports seeking.",
   "studio.tap.no_lines": "There are no lines to tap.",
-  "studio.language": "Language",
   "player.error.no_position": "The player has no position yet.",
   "studio.not_playing": "—",
   "studio.fetching": "Fetching…",

@@ -124,8 +124,15 @@ confirmed that the active line stays centred and line changes scroll without the
 bar and transport stay visible while playing; the auto-hide was removed because it made the
 controls intermittently unreachable.
 
-The Studio transport now ignores clicks while a control request is in flight and discards stale
-`getNow()` responses. A full owner acceptance pass on the Studio remains.
+The Studio transport queues a single click that arrives while a control request is in flight
+instead of swallowing it (a double-click still counts as one toggle), and bridges one failed
+`can_play` sample so the button does not briefly disable under the pointer. A seek guard holds
+the timeline playhead at the requested position until the player reports it, so a stale
+`getNow()` response no longer makes the playhead jump back and forth. The guard has unit tests
+in `web/src/studio/seek.test.ts`. A headless Chromium run against a real `mpv` session confirmed
+that a click arriving while a request was in flight still reached the player and that a marker
+seek moved the playhead forward without a backward step. A full owner acceptance pass on the
+Studio remains.
 
 ## Manual player matrix
 

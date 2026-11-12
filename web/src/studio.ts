@@ -16,7 +16,7 @@ import {
   type LyricsSource,
   type Now,
 } from "./api";
-import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
+import { applyTranslations, detectLanguage, t, type Language } from "./i18n";
 import { errorMessage, sourceLabelKey } from "./messages";
 import { formatTime, positionAt, targetPosition, updateAnchor, type Anchor } from "./player";
 import {
@@ -48,6 +48,7 @@ import {
   startTap,
   type TapSession,
 } from "./studio/tap";
+import { isStaleSeekSample, startSeekGuard, type SeekGuard } from "./studio/seek";
 import {
   DEFAULT_SCALE,
   canvasWidth,
@@ -154,6 +155,7 @@ let dirty = false;
 let leaving = false;
 let busy = false;
 let transportBusy = false;
+let transportQueued = false;
 let nowSerial = 0;
 let fetching = false;
 let migratedNotice = false;
@@ -162,6 +164,7 @@ let scale = DEFAULT_SCALE;
 let editSnapshot: EditorSnapshot | null = null;
 let anchor: Anchor | null = null;
 let anchorTrack = "";
+let pendingSeek: SeekGuard | null = null;
 let pollBusy = false;
 let pollOffline = false;
 let nextRecovery = 0;
@@ -180,7 +183,7 @@ let tapSnapshot: EditorSnapshot | null = null;
 let tapTimer: number | null = null;
 
 async function boot(): Promise<void> {
-  applyLanguage(language, false);
+  applyLanguage(language);
   bindEvents();
   booted = true;
   els.loading.hidden = true;
@@ -202,27 +205,17 @@ async function boot(): Promise<void> {
   void poll();
 }
 
-function applyLanguage(next: Language, persist: boolean): void {
+function applyLanguage(next: Language): void {
   language = next;
   document.documentElement.lang = next;
   document.title = t(next, "studio.page_title");
   applyTranslations(document, next);
-  updateLanguageButtons();
-  if (persist) {
-    rememberLanguage(next);
-  }
   if (booted) {
     renderStructure();
     if (tapPhase !== null) {
       updateTapUI();
     }
   }
-}
-
-function updateLanguageButtons(): void {
-  document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.language === language));
-  });
 }
 
 async function loadCurrent(): Promise<void> {
@@ -237,6 +230,7 @@ async function loadCurrent(): Promise<void> {
     fatalMessage = null;
     key = null;
     item = null;
+    resetTransportState();
     if (state.track) {
       bindCurrentTrack(state);
     } else {
@@ -279,6 +273,7 @@ function applyItem(result: LibraryItemResponse): void {
   boundTitle = null;
   boundArtist = null;
   item = result;
+  resetTransportState();
   metadata = result.lyrics.metadata ?? [];
   extras = result.lyrics.extras ?? [];
   source = result.lyrics.source ?? "manual";
@@ -316,6 +311,7 @@ function showFatal(message: string): void {
   boundTitle = null;
   boundArtist = null;
   item = null;
+  resetTransportState();
   lines = [];
   metadata = [];
   extras = [];
@@ -405,11 +401,64 @@ function updateNotice(): void {
   }
 }
 
+const TRANSPORT_GRACE_MS = 2000;
+let transportReadyUntil = 0;
+let transportReadyDocument = "";
+let transportReadyTrack = "";
+
+/** The opened document that the transport belongs to. */
+function documentIdentity(): string {
+  return key ?? `unsaved:${boundTrackId ?? ""}|${boundSignature ?? ""}`;
+}
+
+function followedTrackIdentity(): string {
+  const track = now?.track;
+  if (!track) {
+    return "";
+  }
+  // Some players reuse one MPRIS track id for every track, so include the signature too.
+  return `${track.player}:${track.track_id}|${now?.lyrics.signature ?? ""}`;
+}
+
+/** Drop transport state that belongs to the document that was open before. */
+function resetTransportState(): void {
+  pendingSeek = null;
+  transportQueued = false;
+  transportReadyUntil = 0;
+  transportReadyDocument = "";
+  transportReadyTrack = "";
+}
+
+/**
+ * Whether the transport may control the followed player. One failed provider sample (a slow
+ * D-Bus reply, for example) clears `can_play` for a single poll. Disabling the button inside
+ * that window swallowed the click, so bridge a short gap instead. The grace never crosses a
+ * different Studio document or a different track. A completely missing track disables the
+ * control, because the server cannot reach a player it cannot see.
+ */
+function transportReady(): boolean {
+  const nowMs = performance.now();
+  const track = now?.track;
+  if (isCurrent() && track?.can_play) {
+    transportReadyUntil = nowMs + TRANSPORT_GRACE_MS;
+    transportReadyDocument = documentIdentity();
+    transportReadyTrack = followedTrackIdentity();
+    return true;
+  }
+  if (nowMs >= transportReadyUntil || transportReadyDocument !== documentIdentity()) {
+    return false;
+  }
+  return Boolean(track) && followedTrackIdentity() === transportReadyTrack;
+}
+
 function renderTransport(): void {
   const current = isCurrent();
   const track = now?.track;
   const playing = current && Boolean(track?.playing);
-  els.play.disabled = !current || !track?.can_play || transportBusy;
+  // Never disable while a request is in flight: a second click is queued by onPlay instead of
+  // being swallowed by the browser. Also bridge a single failed `can_play` or follow sample.
+  els.play.disabled = !transportReady();
+  els.play.setAttribute("aria-busy", String(transportBusy));
   els.play.textContent = playing ? "❚❚" : "▶";
   const label = t(language, playing ? "studio.pause" : "studio.play");
   els.play.title = label;
@@ -812,6 +861,7 @@ async function previewLine(): Promise<void> {
   renderInspectorView();
   const rate = now?.track?.rate ?? 1;
   const start = Math.max(0, line.t - 1.5);
+  pendingSeek = startSeekGuard(start, true, rate, performance.now());
   try {
     await setPlayback("pause");
     await seekPlayer(start);
@@ -836,6 +886,7 @@ async function previewLine(): Promise<void> {
       renderInspectorView();
     }, 3000);
   } catch (error) {
+    pendingSeek = null;
     stopAnchor();
     previewing = false;
     showToast(errorMessage(language, error));
@@ -906,13 +957,16 @@ function startTapRun(): void {
 }
 
 async function beginTapping(): Promise<void> {
+  pendingSeek = startSeekGuard(0, true, now?.track?.rate ?? 1, performance.now());
   try {
     await seekPlayer(0);
     if (tapPhase !== "countdown") {
+      pendingSeek = null;
       return;
     }
     await setPlayback("play");
     if (tapPhase !== "countdown") {
+      pendingSeek = null;
       void setPlayback("pause").catch(() => undefined);
       return;
     }
@@ -929,6 +983,7 @@ async function beginTapping(): Promise<void> {
     updateTapUI();
     els.tapTap.focus();
   } catch (error) {
+    pendingSeek = null;
     if (tapPhase === null) {
       return;
     }
@@ -1230,8 +1285,8 @@ function bindEvents(): void {
     }
     leaving = true;
   });
-  els.play.addEventListener("click", () => {
-    void onPlay();
+  els.play.addEventListener("click", (event) => {
+    void onPlay(event.detail);
   });
   els.fetch.addEventListener("click", () => {
     void fetchFromLrclib();
@@ -1280,15 +1335,6 @@ function bindEvents(): void {
     storeCorrection(correction);
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const next = button.dataset.language;
-      if (next === "en" || next === "nl") {
-        applyLanguage(next, true);
-      }
-    });
-  });
-
   window.addEventListener("resize", () => {
     renderTimelineView();
   });
@@ -1306,12 +1352,19 @@ function bindEvents(): void {
   });
 }
 
-async function onPlay(): Promise<void> {
-  if (transportBusy) {
+async function onPlay(detail = 1): Promise<void> {
+  // A double-click is one intent, even when the second click arrives after the first request
+  // already finished.
+  if (detail > 1) {
     return;
   }
-  if (!isCurrent()) {
-    showToast(t(language, "studio.notice.not_current"));
+  if (transportBusy) {
+    // Never drop a single click that lands while the first request is in flight; run it after.
+    transportQueued = true;
+    return;
+  }
+  if (!transportReady()) {
+    showToast(t(language, now?.track ? "studio.notice.not_current" : "studio.notice.no_track"));
     return;
   }
   transportBusy = true;
@@ -1323,7 +1376,12 @@ async function onPlay(): Promise<void> {
     showToast(errorMessage(language, error));
   } finally {
     transportBusy = false;
+    const queued = transportQueued;
+    transportQueued = false;
     renderTransport();
+    if (queued) {
+      void onPlay();
+    }
   }
 }
 
@@ -1336,21 +1394,28 @@ async function seekToTime(time: number): Promise<void> {
     showToast(t(language, "studio.error.no_seek"));
     return;
   }
+  const target = Math.max(0, time);
+  const previous = anchor;
+  const playing = anchor?.playing ?? now.track.playing;
+  const rate = now.track.rate;
+  // Hold the playhead at the requested position while the player still reports the old one,
+  // and show it immediately so a slow player does not make the click look lost.
+  pendingSeek = startSeekGuard(target, playing, rate, performance.now());
+  anchor = { pos: target, at: performance.now(), playing, rate, ok: true };
+  renderTransport();
+  updatePlayhead(els.playhead, livePosition(), scale);
+  if (playing) {
+    ensureFrame();
+  }
   try {
-    await seekPlayer(Math.max(0, time));
-    anchor = {
-      pos: Math.max(0, time),
-      at: performance.now(),
-      playing: anchor?.playing ?? now.track.playing,
-      rate: now.track.rate,
-      ok: true,
-    };
+    await seekPlayer(target);
+    // Start the local clock when the player accepted the seek, not before the round trip.
+    anchor = { pos: target, at: performance.now(), playing, rate, ok: true };
+  } catch (error) {
+    pendingSeek = null;
+    anchor = previous;
     renderTransport();
     updatePlayhead(els.playhead, livePosition(), scale);
-    if (anchor.playing) {
-      ensureFrame();
-    }
-  } catch (error) {
     showToast(errorMessage(language, error));
   }
 }
@@ -1564,8 +1629,8 @@ async function refreshNow(): Promise<void> {
 function updateAnchorFrom(state: Now): void {
   const track = state.track;
   if (!track) {
-    anchor = null;
-    anchorTrack = "";
+    // Keep the last clock through a missed provider sample. A real track change is detected
+    // below, and a hidden playhead already makes the gap visible.
     return;
   }
   const id = `${track.player}:${track.track_id}`;
@@ -1573,16 +1638,30 @@ function updateAnchorFrom(state: Now): void {
   if (target === null) {
     anchor = null;
     anchorTrack = id;
+    pendingSeek = null;
     return;
   }
-  anchor = updateAnchor(
-    anchor,
-    id === anchorTrack,
-    target,
-    track.playing,
-    track.rate,
-    performance.now(),
-  );
+  const nowMs = performance.now();
+  if (pendingSeek && id === anchorTrack) {
+    // A sample from before the seek must not pull the playhead back. Once the player reports
+    // the requested position, settle on it instead of easing across the small offset a player
+    // can keep after a seek (frame rounding, for example).
+    if (isStaleSeekSample(pendingSeek, target, nowMs)) {
+      return;
+    }
+    pendingSeek = null;
+    anchor = {
+      pos: target,
+      at: nowMs,
+      playing: track.playing,
+      rate: track.rate > 0 && Number.isFinite(track.rate) ? track.rate : 1,
+      ok: true,
+    };
+    anchorTrack = id;
+    return;
+  }
+  pendingSeek = null;
+  anchor = updateAnchor(anchor, id === anchorTrack, target, track.playing, track.rate, nowMs);
   anchorTrack = id;
 }
 
