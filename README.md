@@ -217,6 +217,9 @@ identifies the library file. `item_key` in lookup requests is a library key.
 
 ## Checks
 
+The workspace includes the Tauri shell, so a full Linux test needs the WebKitGTK 4.1 and GTK 3
+development packages in addition to the runtime libraries.
+
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings

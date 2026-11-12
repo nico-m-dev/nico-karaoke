@@ -273,6 +273,8 @@ Before packaging starts, the owner runs the app in development and confirms it i
 
 Then:
 
+- [ ] Install WebKitGTK 4.1 and GTK 3 development packages on Linux CI runners before the
+  workspace-wide Rust test compiles the desktop crate.
 - [ ] Run the SMTC acceptance matrix on a real Windows machine before a Windows release.
 - [ ] Embedded frontend assets in the release binary.
 - [ ] Linux and Windows release builds in CI.
