@@ -1,7 +1,5 @@
 import type { LibrarySummary } from "./api";
 
-export const MAX_LYRICS_LENGTH = 120_000;
-
 export function matchesLibraryQuery(
   item: Pick<LibrarySummary, "title" | "artist" | "album">,
   query: string,
@@ -23,8 +21,4 @@ export function youtubeSearchUrl(title: string, artist: string): string {
 
 export function spotifySearchUrl(title: string, artist: string): string {
   return `https://open.spotify.com/search/${encodeURIComponent(`${title} ${artist}`.trim())}`;
-}
-
-export function textIsDirty(current: string, saved: string): boolean {
-  return current !== saved;
 }

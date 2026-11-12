@@ -69,6 +69,14 @@ struct Cooldown {
     until: Instant,
 }
 
+struct MatchCache {
+    revision: u64,
+    title: String,
+    artist: String,
+    duration: Option<u64>,
+    key: String,
+}
+
 pub struct NewLibraryItem {
     pub title: String,
     pub artist: String,
@@ -88,6 +96,7 @@ pub struct Watcher {
     in_flight: Mutex<Option<(u64, u64)>>,
     cooldown: Mutex<Option<Cooldown>>,
     ensure_lock: Mutex<()>,
+    match_cache: Mutex<Option<MatchCache>>,
     revision: AtomicU64,
 }
 
@@ -109,6 +118,7 @@ impl Watcher {
             in_flight: Mutex::new(None),
             cooldown: Mutex::new(None),
             ensure_lock: Mutex::new(()),
+            match_cache: Mutex::new(None),
             revision: AtomicU64::new(0),
         }
     }
@@ -180,9 +190,42 @@ impl Watcher {
     /// Key for the followed track, using the library's title fallback when a provider omits
     /// the artist or adds video decorations.
     fn matched_key(&self, title: &str, artist: &str, duration: Option<f64>) -> String {
-        self.library
-            .find_key(title, artist, duration)
-            .unwrap_or_else(|| record_key(title, artist))
+        let revision = self.revision.load(Ordering::SeqCst);
+        let duration = duration
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map(|value| (value * 1000.0).round() as u64);
+
+        {
+            let cache = self
+                .match_cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(cache) = cache.as_ref() {
+                if cache.revision == revision
+                    && cache.title == title
+                    && cache.artist == artist
+                    && cache.duration == duration
+                {
+                    return cache.key.clone();
+                }
+            }
+        }
+
+        let key = self
+            .library
+            .find_key(title, artist, duration.map(|value| value as f64 / 1000.0))
+            .unwrap_or_else(|| record_key(title, artist));
+        *self
+            .match_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(MatchCache {
+            revision,
+            title: title.to_owned(),
+            artist: artist.to_owned(),
+            duration,
+            key: key.clone(),
+        });
+        key
     }
 
     pub async fn choose_player(self: &Arc<Self>, player: &str) -> bool {

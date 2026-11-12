@@ -65,7 +65,7 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Lyrics are fetched, not downloaded as media. Playback stays in the user's own player.
 - Destructive actions need explicit confirmation in the UI.
 - Public sharing or publishing of lyrics is always opt-in and confirmed.
-- The player view stays deliberately quiet: playback, library, edit, fullscreen. Editing
+- The player view stays deliberately quiet: playback, library, Studio, fullscreen. Editing
   belongs in the Studio.
 
 ## Data format

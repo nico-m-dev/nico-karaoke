@@ -19,7 +19,8 @@ export const MUSIC_DUPLICATE_WINDOW = 0.1;
 export function makeEditorLines(
   source: LyricLine[],
   startIndex = 1,
-): { lines: EditorLine[]; migrated: number; nextId: number } {
+): { lines: EditorLine[]; migrated: number; normalized: number; nextId: number } {
+  const normalized = source.filter((line) => line.t !== null && line.text.trim() === "").length;
   const migrated = migrateLegacyEnds(source);
   const lines = migrated.lines.map((line, index) => ({
     id: `line-${startIndex + index}`,
@@ -29,6 +30,7 @@ export function makeEditorLines(
   return {
     lines: sortLines(lines),
     migrated: migrated.migrated,
+    normalized,
     nextId: startIndex + lines.length,
   };
 }

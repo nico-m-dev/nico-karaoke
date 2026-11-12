@@ -149,6 +149,7 @@ let dirty = false;
 let busy = false;
 let fetching = false;
 let migratedNotice = false;
+let normalizedNotice = false;
 let undoStack: EditorSnapshot[] = [];
 let scale = DEFAULT_SCALE;
 let editSnapshot: EditorSnapshot | null = null;
@@ -234,6 +235,7 @@ async function loadCurrent(): Promise<void> {
     selectedId = null;
     dirty = false;
     migratedNotice = false;
+    normalizedNotice = false;
     undoStack = [];
     renderStructure();
     els.playhead.hidden = true;
@@ -267,8 +269,9 @@ function applyItem(result: LibraryItemResponse): void {
   selectedId = lines[0]?.id ?? null;
   undoStack = [];
   editSnapshot = null;
-  dirty = adopted.migrated > 0;
+  dirty = adopted.migrated > 0 || adopted.normalized > 0;
   migratedNotice = adopted.migrated > 0;
+  normalizedNotice = adopted.normalized > 0;
   renderStructure();
   syncRawText();
   centerTimelineOnLine(selectedId);
@@ -286,6 +289,8 @@ function showFatal(message: string): void {
   lines = [];
   selectedId = null;
   dirty = false;
+  migratedNotice = false;
+  normalizedNotice = false;
   renderStructure();
   showNotice(message);
 }
@@ -351,6 +356,8 @@ function updateNotice(): void {
   let message = "";
   if (migratedNotice) {
     message = t(language, "studio.notice.migrated");
+  } else if (normalizedNotice) {
+    message = t(language, "studio.notice.music_normalized");
   } else if (!now?.track) {
     message = t(language, "studio.notice.no_track");
   } else if (!key && boundTrackId && !isCurrent()) {
@@ -473,6 +480,7 @@ async function save(): Promise<void> {
     fatalMessage = null;
     dirty = false;
     migratedNotice = false;
+    normalizedNotice = false;
     undoStack = [];
     editSnapshot = null;
     await refreshNow().catch(() => undefined);
@@ -717,7 +725,6 @@ const inspectorHandlers = {
       removeLine(selectedId);
     }
   },
-  tap: () => openTap(),
 };
 
 async function previewLine(): Promise<void> {
@@ -972,6 +979,9 @@ function updateTapUI(): void {
     }
     const node = document.createElement("p");
     node.className = index === done ? "current" : index < done ? "past" : "next";
+    if (index === done) {
+      node.setAttribute("aria-current", "step");
+    }
     node.textContent = isMusicMarker(line.text)
       ? t(language, "studio.music")
       : line.text || t(language, "studio.text_empty");
@@ -1042,6 +1052,7 @@ async function applyRawText(): Promise<void> {
     nextId = adopted.nextId;
     selectedId = lines[0]?.id ?? null;
     migratedNotice = adopted.migrated > 0;
+    normalizedNotice = adopted.normalized > 0;
     dirty = true;
     renderStructure();
     syncRawText();

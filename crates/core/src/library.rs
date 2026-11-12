@@ -257,16 +257,16 @@ impl Library {
             })
             .collect();
 
-        if candidates.len() <= 1 {
-            return candidates.first().map(|record| record.key.clone());
-        }
-
-        let duration = duration.filter(|value| value.is_finite() && *value > 0.0)?;
+        // A title-only match is only safe when the duration agrees. Without an artist,
+        // "Home" or "Intro" could be any track with that title.
+        let duration = duration.filter(|value| value.is_finite() && *value > 0.0);
         candidates.retain(|record| {
-            record
-                .duration
-                .is_some_and(|value| (value - duration).abs() <= MATCH_DURATION_TOLERANCE_SECONDS)
+            if !artist_key.is_empty() {
+                return true;
+            }
+            durations_agree(record.duration, duration)
         });
+
         if candidates.len() == 1 {
             candidates.first().map(|record| record.key.clone())
         } else {
@@ -553,6 +553,13 @@ fn validate_key(key: &str) -> Result<(), LibraryError> {
     }
 }
 
+fn durations_agree(stored: Option<f64>, target: Option<f64>) -> bool {
+    match (stored, target) {
+        (Some(stored), Some(target)) => (stored - target).abs() <= MATCH_DURATION_TOLERANCE_SECONDS,
+        _ => false,
+    }
+}
+
 fn unix_now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -709,6 +716,27 @@ mod tests {
         assert_eq!(
             library.find_key("Same Title", "Artist B", None),
             Some(second)
+        );
+    }
+
+    #[test]
+    fn a_single_title_candidate_still_needs_a_matching_duration() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Yesterday", "The Beatles");
+        let mut item = record(&key, "Yesterday", "The Beatles", "Line\n");
+        item.duration = Some(125.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(library.find_key("Yesterday", "", Some(240.0)), None);
+        assert_eq!(library.find_key("Yesterday", "", None), None);
+        assert_eq!(
+            library.find_key("Yesterday", "", Some(125.0)),
+            Some(key.clone())
+        );
+        assert_eq!(
+            library.find_key("Yesterday", "The Beatles", None),
+            Some(key)
         );
     }
 

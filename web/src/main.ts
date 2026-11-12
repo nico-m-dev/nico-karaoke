@@ -371,34 +371,40 @@ function ensureTick(): void {
   requestAnimationFrame(tick);
 }
 
+function updateLyricsFrame(): void {
+  if (plainMode || !data.lyrics.synced || lines.length === 0) {
+    return;
+  }
+  const time = lyricTime();
+  if (time === null) {
+    return;
+  }
+
+  const index = findActiveLine(lines, time);
+  const line = index >= 0 ? lines[index] : null;
+  const done = Boolean(
+    line && typeof line.end === "number" && Number.isFinite(line.end) && time >= line.end,
+  );
+
+  if (index !== activeIndex || done !== activeDone) {
+    activeIndex = index;
+    activeDone = done;
+    markLines(index, done);
+    centerLine(index >= 0 ? index : 0);
+  }
+
+  if (index >= 0 && !done) {
+    setFill(index, fillProgress(lines, index, data.track?.length ?? null, time));
+  }
+}
+
 function tick(): void {
   tickScheduled = false;
   const position = livePosition();
   if (position !== null) {
     updateTime(position);
   }
-
-  if (!plainMode && data.lyrics.synced && lines.length > 0) {
-    const time = lyricTime();
-    if (time !== null) {
-      const index = findActiveLine(lines, time);
-      const line = index >= 0 ? lines[index] : null;
-      const done = Boolean(
-        line && typeof line.end === "number" && Number.isFinite(line.end) && time >= line.end,
-      );
-
-      if (index !== activeIndex || done !== activeDone) {
-        activeIndex = index;
-        activeDone = done;
-        markLines(index, done);
-        centerLine(index >= 0 ? index : 0);
-      }
-
-      if (index >= 0 && !done) {
-        setFill(index, fillProgress(lines, index, data.track?.length ?? null, time));
-      }
-    }
-  }
+  updateLyricsFrame();
 
   if (data.track?.playing && !document.hidden) {
     ensureTick();
@@ -515,6 +521,7 @@ function applyNow(next: Now): void {
     lyricsKey = nextLyricsKey;
     rebuildLyrics(next.lyrics);
   }
+  updateLyricsFrame();
 
   if (track.playing) {
     ensureTick();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesLibraryQuery, spotifySearchUrl, textIsDirty, youtubeSearchUrl } from "./library";
+import { matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
 
 const item = {
   title: "Blue Monday",
@@ -27,12 +27,5 @@ describe("search links", () => {
   it("encodes title and artist", () => {
     expect(youtubeSearchUrl("Song & More", "Art ist")).toContain("Song%20%26%20More%20Art%20ist");
     expect(spotifySearchUrl("Song & More", "Art ist")).toContain("Song%20%26%20More%20Art%20ist");
-  });
-});
-
-describe("textIsDirty", () => {
-  it("detects a changed draft", () => {
-    expect(textIsDirty("new", "old")).toBe(true);
-    expect(textIsDirty("same", "same")).toBe(false);
   });
 });

@@ -562,6 +562,45 @@ async fn matches_a_library_record_when_the_provider_omits_the_artist() {
 }
 
 #[tokio::test]
+async fn a_new_library_item_invalidates_the_track_match_cache() {
+    let fixture = Fixture::new(
+        vec![snapshot("player", "Late Song", "")],
+        vec![Ok(Vec::new())],
+    );
+    fixture.watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(fixture.watcher.state().lyrics, LyricsView::Missing { .. }) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("first lookup is missing");
+
+    let (status, _) = fixture
+        .request(
+            Method::POST,
+            "/api/library",
+            Some(json!({
+                "title": "Late Song",
+                "artist": "Late Artist",
+                "duration": 180,
+                "text": "[00:01.00]Late line\n"
+            })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    fixture.watcher.tick().await;
+    let (status, body) = fixture.request(Method::GET, "/api/now", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["lyrics"]["state"], "found");
+    assert_eq!(body["lyrics"]["lines"][0]["text"], "Late line");
+}
+
+#[tokio::test]
 async fn a_miss_is_scoped_to_the_track() {
     let fixture = Fixture::new(
         vec![snapshot("player", "Song A", "Artist")],

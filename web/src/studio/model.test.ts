@@ -64,6 +64,7 @@ describe("makeEditorLines", () => {
       { t: 12, text: "Line", end: null },
     ]);
     expect(result.lines.map((line) => line.text)).toEqual(["♪", "♪", "Line"]);
+    expect(result.normalized).toBe(2);
   });
 
   it("keeps plain lines after timed lines", () => {
