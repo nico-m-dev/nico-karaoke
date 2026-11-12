@@ -165,7 +165,8 @@ The Studio is a separate page, served at `/editor`. Open it from a library item,
 explicit save.
 
 - Header: title, artist, source, original availability, play/pause, position, duration, save,
-  dirty state, language, and fetch/restore actions.
+  dirty state, language, and fetch/restore actions. Play/pause controls the followed player and
+  is disabled when the open item is not the current track.
 - Timeline: time ruler, one marker per line, a moving playhead, zoom from 5 to 120 px/s, fit,
   click-to-seek, and drag-to-retime. Marker labels appear only when they fit.
 - Lines: inline time and text editing, re-sorting on a time change, add line, add `♪` music

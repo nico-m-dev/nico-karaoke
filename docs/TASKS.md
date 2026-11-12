@@ -9,6 +9,8 @@ Status: rewrite delivered. Owner acceptance, the Windows SMTC run, and packaging
 
 - [ ] Owner acceptance run in dev: use the app end to end locally and confirm packaging may
   start. This box belongs to the owner; agents wait until it is checked.
+- [ ] Studio acceptance: transport while editing, play/pause state, timeline, tap mode,
+  save/dirty handling, raw LRC, and the library round-trip.
 
 ## Windows verification
 
@@ -20,10 +22,9 @@ Status: rewrite delivered. Owner acceptance, the Windows SMTC run, and packaging
 - [ ] Switch the Tauri shell from the runtime `frontendDist` URL to embedded assets or a
   packaged resource. The executable-relative fallback is verified; a bundled resource path and
   a real package still need a build.
-- [x] Add the full desktop icon set, including `src-tauri/icons/icon.ico`, so the Windows
-  resource build is no longer blocked by a missing icon.
 - [ ] Add Linux and Windows release builds to CI; WebKitGTK 4.1 and GTK 3 development packages
-  are now installed on Linux runners.
+  are now installed on Linux runners. The icon resource is in place, so the Windows job gets
+  past `tauri-build`; the Windows run itself still needs a real machine.
 - [ ] Add semantic version tags, a changelog, and GitHub Releases with downloadable binaries.
 - [ ] Choose and implement Linux bundle formats (`.deb`, AppImage, or both) and Windows code
   signing if distribution requires it.

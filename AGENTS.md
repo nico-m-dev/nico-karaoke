@@ -57,6 +57,8 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
   record.
 - The UI polls state but interpolates playback position locally; do not add per-frame server
   requests. Animation loops stop while playback is paused.
+- Centre the lyric track with native viewport scrolling, not a CSS transform. WebKitGTK at
+  fractional display scaling visibly jitters transformed text; see `docs/roadmap.md`.
 
 ## Product rules
 

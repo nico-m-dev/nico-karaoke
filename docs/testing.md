@@ -90,8 +90,8 @@ three-hour track:
 - A 1505-character line wraps inside the player instead of creating horizontal page
   overflow. In the Studio the line stays inside its input and scrolls horizontally.
 
-These are exploratory budgets, not hard guarantees. A fixed 60 fps performance gate remains a
-later roadmap item.
+These are exploratory budgets, not hard guarantees. The player measurements predate the
+native-scroll centring; re-measure when the fixed 60 fps budget is picked up.
 
 ## Native window
 
@@ -112,8 +112,20 @@ The Tauri 2 shell loads the built UI from the local Axum server, which it starts
   terminal; a terminal launch prints the same message and exits with code 2.
 - A second launch exits instead of starting a second window, server, and watcher.
 - The browser fallback and `cargo run -p nico-karaoke-server` remain unchanged.
-- Not verified here: the native window on Windows, bundled/assets packaging, icons, and the
-  release checklist. Those remain for packaging.
+- Not verified here: the native window on Windows, bundled/assets packaging, the launcher
+  icon on an installed package, and the release checklist. Those remain for packaging.
+
+## Player rendering
+
+The player centres the active lyric with native viewport scrolling; it does not move the track
+with a CSS transform. This changed after WebKitGTK 4.1 at 1.25 fractional scaling made
+transformed lyric text visibly jump. A fullscreen WebKitGTK test view with a fake player
+confirmed that the active line stays centred and line changes scroll without the jump. The top
+bar and transport stay visible while playing; the auto-hide was removed because it made the
+controls intermittently unreachable.
+
+The Studio transport now ignores clicks while a control request is in flight and discards stale
+`getNow()` responses. A full owner acceptance pass on the Studio remains.
 
 ## Manual player matrix
 

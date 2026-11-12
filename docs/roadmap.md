@@ -132,7 +132,12 @@ distribution step after owner acceptance and the Windows run.
 - **Storage:** clean, versioned `.lrc` plus `.json` files; no Python-library migration.
 - **Local security:** loopback bind, `Host`/`Origin` validation, bounded JSON, no telemetry,
   no audio capture, and no automatic publishing.
-- **Licence:** MIT, inherited from the original project.
+- **Player scrolling:** centre the active lyric with native viewport scrolling, not a CSS
+  transform; WebKitGTK at fractional scaling visibly jitters transformed text.
+- **Player chrome:** the top bar and transport stay visible while playing; there is no
+  auto-hide.
+- **Licence:** MIT for the source code and documentation; the head mark and app icon are
+  reserved brand assets (see `NOTICE`).
 
 ## Open questions
 
