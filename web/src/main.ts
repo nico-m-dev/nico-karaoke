@@ -238,22 +238,29 @@ function updateLanguageButtons(): void {
   });
 }
 
+function setText(element: HTMLElement, text: string): void {
+  if (element.textContent !== text) {
+    element.textContent = text;
+  }
+}
+
 function updateTrackTexts(track: Track | null): void {
   els.songTitle.setAttribute("aria-level", track ? "1" : "2");
   if (!track) {
-    els.songTitle.textContent = t(language, "app.title");
-    els.songArtist.textContent = t(language, "player.waiting");
+    setText(els.songTitle, t(language, "app.title"));
+    setText(els.songArtist, t(language, "player.waiting"));
     return;
   }
-  els.songTitle.textContent = track.title || t(language, "player.unknown_track");
-  els.songArtist.textContent = [track.artist, track.label].filter(Boolean).join(" · ");
+  setText(els.songTitle, track.title || t(language, "player.unknown_track"));
+  setText(els.songArtist, [track.artist, track.label].filter(Boolean).join(" · "));
 }
 
 function updateIdleHint(players: PlayerInfo[]): void {
   const names = players.map((player) => player.label).filter(Boolean);
-  els.idleHint.textContent = names.length
-    ? t(language, "player.idle.players", { names: names.join(", ") })
-    : "";
+  setText(
+    els.idleHint,
+    names.length ? t(language, "player.idle.players", { names: names.join(", ") }) : "",
+  );
 }
 
 function updatePlayers(players: PlayerInfo[], track: Track | null): void {
@@ -277,13 +284,25 @@ function updatePlayers(players: PlayerInfo[], track: Track | null): void {
   if (selected && els.players.value !== selected) {
     els.players.value = selected;
   }
-  els.players.hidden = players.length < 2;
+  // Do not hide the picker on a transient one-player state during a track change; that made
+  // the whole top bar reflow twice. It only appears when there is a real choice and only
+  // disappears when no player is left.
+  if (players.length >= 2) {
+    els.players.hidden = false;
+  } else if (players.length === 0) {
+    els.players.hidden = true;
+  }
   updateIdleHint(players);
 }
 
 function updatePlayButton(track: Track | null): void {
-  els.play.disabled = !track;
-  els.play.textContent = track?.playing ? "❚❚" : "▶";
+  // A poll must not re-enable the button while a control request is still in flight: clicks
+  // during that window were ignored by onPlay and looked like a broken play/pause button.
+  els.play.disabled = !track || controlBusy;
+  const icon = track?.playing ? "❚❚" : "▶";
+  if (els.play.textContent !== icon) {
+    els.play.textContent = icon;
+  }
 }
 
 function updateTime(position: number | null): void {
@@ -511,12 +530,15 @@ function applyNow(next: Now): void {
 
   if (!track) {
     if (document.body.dataset.state === "playing") {
-      renderPlayers(next.players, null);
+      // Keep the last track's top bar and lyrics during a short metadata gap between songs.
+      // Re-rendering the players here made the whole top bar flash twice on many track
+      // changes. Only fall back to the idle screen if the gap really lasts.
       if (!idleTimer) {
+        updatePlayButton(null);
         idleTimer = window.setTimeout(() => {
           idleTimer = 0;
           goIdle(data);
-        }, 2000);
+        }, 4000);
       }
       return;
     }
