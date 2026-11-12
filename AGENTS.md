@@ -65,10 +65,25 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Never add telemetry, analytics, remote logging, or automatic uploads.
 - Never record or capture audio.
 - Lyrics are fetched, not downloaded as media. Playback stays in the user's own player.
+- Playback control is limited to play, pause, and seek on the user's existing player; the app
+  never owns playback.
+- The Studio never writes without an explicit save.
+- A player without position or seek support still gets readable lyrics and a usable Studio.
 - Destructive actions need explicit confirmation in the UI.
 - Public sharing or publishing of lyrics is always opt-in and confirmed.
 - The player view stays deliberately quiet: playback, library, Studio, fullscreen. Editing
   belongs in the Studio.
+
+## Non-goals
+
+- Recording, cloning, or enhancing audio.
+- Downloading or streaming the song itself.
+- A built-in media player.
+- A cloud account or sync service.
+- Automatic public publishing of lyrics.
+- Telemetry or analytics.
+- Backwards compatibility with the Python app's library or cache.
+- A plugin system.
 
 ## Data format
 
@@ -78,6 +93,8 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - A manual `.lrc` edit wins over the JSON copy. Metadata-only updates must not overwrite
   newer manual text.
 - Keep the saved original LRCLIB text separate from the working text.
+- Keep one working text per song. The first saved original is preserved for restore, but there
+  is no on-disk version history.
 - Version the JSON schema from the first release. A future schema change needs a documented
   version bump, a backup path, and tests.
 - Write files atomically and serialise library writes.

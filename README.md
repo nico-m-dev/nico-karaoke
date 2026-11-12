@@ -215,7 +215,9 @@ two files:
 - a `.json` file with metadata, source, offset, timestamps, and the preserved original.
 
 A manual `.lrc` edit wins over the JSON copy. Metadata-only updates keep that manual text.
-Files are written atomically. The legacy Python library is not read or migrated.
+Files are written atomically. There is one working text per song and no on-disk version
+history; the first saved original is kept for restore. The legacy Python library is not read
+or migrated.
 
 The data directory also contains `nico-karaoke.log` for the desktop and windowless builds. At
 startup a file of 5 MiB or more is rotated to `.1`; three backups are kept. Use
