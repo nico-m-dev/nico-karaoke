@@ -60,8 +60,9 @@ cargo run -p nico-karaoke-server
 ```
 
 Open <http://127.0.0.1:8770/>. The server tries the next free port when `8770` is busy. The
-default frontend directory is `web/dist` relative to the current working directory; run the
-server from the repository root, or set `NICO_KARAOKE_WEB` to an absolute or relative path.
+default frontend directory is `web/dist` relative to the current working directory; the server
+also checks next to its executable and under `../share/nico-karaoke/web`, so a packaged build
+works from any working directory. Set `NICO_KARAOKE_WEB` to override the path explicitly.
 
 For browser development, run the server and Vite side by side:
 
@@ -93,6 +94,10 @@ Command-line options:
 | `--no-open` | start the server without opening anything |
 | `-h`, `--help` | show usage |
 | `-V`, `--version` | show the version |
+
+The desktop shell accepts only a loopback host (`127.0.0.1`, `::1`, or `localhost`); a public
+bind belongs to the server binary. The desktop shell also rejects `--browser` and `--no-open`
+because it always opens its own window.
 
 ## Data
 
@@ -189,7 +194,8 @@ explicit save.
 ## Local API
 
 The local HTTP API returns JSON and never caches responses. It is only reachable from this
-machine and rejects foreign `Host`/`Origin` headers. API writes require JSON and a bounded
+machine: a missing or foreign `Host` and a foreign `Origin` are rejected, so binding the server
+to another interface does not grant remote access. API writes require JSON and a bounded
 body. Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, and a self-only
 content security policy. Static serving rejects path traversal.

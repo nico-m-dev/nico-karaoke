@@ -36,6 +36,15 @@ the MSVC linker, so CI runs it on `windows-latest`.
   custom properties. A Chromium load of the player and Studio reported no CSP violations.
 - The app never binds to a public interface by default and never sends telemetry.
 
+## Lyrics round-trip
+
+- Metadata tags such as `[ar:]`, `[ti:]`, and `[al:]` survive a parse and Studio save. The
+  parser deliberately drops `[offset:]` after applying it to the timestamps, so saving does
+  not shift the file twice.
+- Untimed, non-metadata lines in a mixed document are preserved on save but are not shown as
+  timed lyrics.
+- Rust parser/serializer tests and the Studio serializer test cover both cases.
+
 ## Logs
 
 `nico-karaoke.log` lives in the data directory. At startup, a file of at least 5 MiB is moved
@@ -84,10 +93,19 @@ later roadmap item.
 The Tauri 2 shell loads the built UI from the local Axum server, which it starts itself.
 
 - Verified on Linux: window title, player, Studio, `/api/health`, port fallback when `8770` is
-  occupied, shared data directory and log file, clean shutdown with no orphaned listener, and
-  the Vite HMR override through `NICO_KARAOKE_WEBVIEW_URL`.
+  occupied, shared data directory and log file, and clean shutdown with no orphaned listener.
 - External YouTube/Spotify links are handed to the system browser instead of opening a second
   webview.
+- The shell starts from an arbitrary working directory when the frontend is placed next to the
+  binary or under `../share/nico-karaoke/web`; checked from a temporary directory with a copied
+  binary and assets.
+- HMR starts without a prior `web/dist` build when `NICO_KARAOKE_WEBVIEW_URL` is set; the
+  startup path was exercised. A full HMR session with a running Vite server remains for owner
+  acceptance.
+- A non-loopback `--host` is rejected with exit code 2 before the listener binds.
+- A missing frontend build shows a GTK error dialog when the app is launched without a
+  terminal; a terminal launch prints the same message and exits with code 2.
+- A second launch exits instead of starting a second window, server, and watcher.
 - The browser fallback and `cargo run -p nico-karaoke-server` remain unchanged.
 - Not verified here: the native window on Windows, bundled/assets packaging, icons, and the
   release checklist. Those remain for packaging.

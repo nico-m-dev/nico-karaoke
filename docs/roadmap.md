@@ -52,7 +52,8 @@ See `README.md` for usage and `docs/testing.md` for evidence and known gaps.
 - Real Windows SMTC run with a media application before a Windows release.
 - Packaged Tauri builds with the frontend embedded or shipped as a resource, so the app runs
   from any working directory and without a repository checkout.
-- Full desktop icon set, version metadata, and no console window on Windows.
+- Full desktop icon set. Version metadata is single-sourced from Cargo, and the Windows
+  console window is already suppressed.
 - Linux and Windows release builds in CI, with WebKitGTK/GTK development packages installed
   on Linux runners.
 - Semantic version tags, a changelog, and GitHub Releases with downloadable binaries.
@@ -60,6 +61,30 @@ See `README.md` for usage and `docs/testing.md` for evidence and known gaps.
   grows beyond local use.
 - Optional update notification against GitHub Releases; report only, never install silently.
 - macOS only when a real test machine is available.
+
+## Omarchy distribution (later)
+
+Nico Karaoke is a normal desktop app. Nothing in the product needs Qt or a rewrite to run on
+Omarchy; this work is packaging and desktop integration, not a port. Treat it as a later
+distribution step after owner acceptance and the Windows run.
+
+- Embed the web assets, or install them as a package resource. The executable-relative
+  fallback already works from any working directory, but a bundled resource path and a real
+  package still need a build.
+- Add an Arch package (PKGBUILD) that installs the binary, the web assets, a `.desktop` entry,
+  and an icon. Prefer a small release tarball over a Rust/Node toolchain build.
+- Align the `.desktop` filename, icon name, and actual window class so the launcher and
+  Hyprland match the window to the app. Verify the class with `hyprctl clients`:
+  `enableGTKAppId` is enabled, but the window class may still follow the binary name.
+- Single-instance behaviour is already in place; verify that a packaged second launch focuses
+  the existing window.
+- Follow the Omarchy theme when it is present: read the current theme's `colors.toml` and
+  generation file, pass the palette to the web UI, and keep the current palette as fallback.
+  Check contrast for muted text and danger colours instead of copying theme values blindly.
+- Optional Omarchy conventions: default language from the Omarchy language file, a `?`
+  shortcut overlay, remembered window size, and Hyprland corner rounding.
+- Release through `omacom/omarchy-pkgs` with a tagged GitHub release and checksums, and test
+  the installed app from the launcher under Hyprland rather than only from a terminal.
 
 ## Product follow-ups
 
