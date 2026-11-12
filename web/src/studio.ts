@@ -332,7 +332,6 @@ function renderHeader(): void {
 
   els.save.disabled = (key ? false : !isCurrent()) || !dirty || busy;
   els.undo.disabled = undoStack.length === 0 || busy;
-  els.tapMode.disabled = !isCurrent() || !now?.track?.can_seek || lines.length === 0;
   els.tapMode.title = !isCurrent()
     ? t(language, "studio.notice.not_current")
     : !now?.track?.can_seek

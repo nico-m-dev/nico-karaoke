@@ -233,8 +233,7 @@ Acceptance:
 - [x] Move tap mode out of the inspector into the transport bar and show previous and next
   lines around the line being tapped.
 - [x] Stop animation frames while playback is paused and halve Studio polling.
-- [x] Add tests for metadata matching, blank-line music markers, and the library/Studio
-  split; re-run the live checks.
+- [x] Add tests for metadata matching and blank-line music markers; re-run the live checks.
 
 ## Phase 10 — Packaging
 
