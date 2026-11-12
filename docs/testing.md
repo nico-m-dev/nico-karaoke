@@ -90,7 +90,7 @@ The Tauri 2 shell loads the built UI from the local Axum server, which it starts
   webview.
 - The browser fallback and `cargo run -p nico-karaoke-server` remain unchanged.
 - Not verified here: the native window on Windows, bundled/assets packaging, icons, and the
-  release checklist. Those stay in Phase 10.
+  release checklist. Those remain for packaging.
 
 ## Manual player matrix
 

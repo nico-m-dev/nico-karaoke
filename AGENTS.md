@@ -11,9 +11,9 @@ The app does **not** record audio, download tracks, play video, or require an ac
 
 ## Status
 
-This repository is a clean rewrite of an existing Python application. The Python project is
-the behavioural reference, not a code reference: keep the product behaviour, replace the
-implementation. The rewrite uses Rust for the backend and TypeScript for the frontend.
+The rewrite is implemented: Rust backend, strict TypeScript player, library, and Studio, a
+browser fallback, and a Tauri 2 desktop shell that starts the same local server. Remaining
+work is owner acceptance, finetuning, a real Windows SMTC run, and packaging.
 
 There is no remote yet. Work locally on `main` until a remote is agreed.
 
@@ -29,7 +29,7 @@ There is no remote yet. Work locally on `main` until a remote is agreed.
 - Use ISO 8601 dates (`2026-11-11`) in documentation and changelogs.
 - Prefer short, factual documentation over marketing copy.
 
-## Planned stack
+## Stack
 
 - **Backend:** Rust, stable toolchain, Tokio, Axum, Serde, Reqwest.
 - **Media:** MPRIS through `zbus`/`mpris` on Linux; SMTC through the `windows` crate on
@@ -37,11 +37,12 @@ There is no remote yet. Work locally on `main` until a remote is agreed.
 - **Frontend:** TypeScript with strict compiler settings and Vite. Keep the player
   framework-free unless a framework is explicitly agreed; the lyrics view needs precise,
   cheap animation.
-- **Desktop shell:** Tauri comes later. The core, API, and web UI must work without Tauri so
-  the browser fallback stays usable.
-- **Shared types:** API request/response types are defined once in Rust and exposed to
-  TypeScript, either generated or kept in a single checked contract. Avoid hand-written
-  duplicate shapes that can drift.
+- **Desktop shell:** Tauri 2 in `src-tauri`, sharing the server runtime in `crates/server`.
+  `npm run app` builds the web UI and starts the shell; `npm run app:hmr` adds Vite hot
+  reload. The core, API, and web UI must keep working without Tauri so the browser fallback
+  stays usable.
+- **Shared types:** API shapes are currently mirrored in `web/src/api.ts` from the Rust DTOs.
+  Keep them in sync; generating one shared contract remains an open improvement.
 
 Do not add a dependency, framework, or build tool without agreeing on it first.
 
@@ -55,11 +56,12 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Library writes are atomic and serialised. A failed write must not leave a half-written
   record.
 - The UI polls state but interpolates playback position locally; do not add per-frame server
-  requests.
+  requests. Animation loops stop while playback is paused.
 
 ## Product rules
 
-- Localhost only by default. Validate `Host` and `Origin` on every request.
+- Localhost only by default. Validate `Host` and `Origin` on every request. The Tauri
+  window loads only the local server; a dev override is restricted to local `http` URLs.
 - Never add telemetry, analytics, remote logging, or automatic uploads.
 - Never record or capture audio.
 - Lyrics are fetched, not downloaded as media. Playback stays in the user's own player.
@@ -119,14 +121,17 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 ## Workflow
 
 - For a new feature, multi-file refactor, data migration, release, or anything that goes
-  live, keep a temporary checklist in `docs/TASKS.md`, organised in phases.
+  live, keep a temporary checklist in `docs/TASKS.md`, organised by the current workstream
+  (owner acceptance, verification, packaging, or an active follow-up).
 - `docs/roadmap.md` owns product scope and future ideas. `docs/TASKS.md` owns the current
   execution plan. Move items between them deliberately.
 - Before saying something works, run it. Static checks alone are not evidence of runtime
   behaviour.
 - Have a subagent read the diff and run the tests before calling large work done.
-- When work finishes, remove the temporary checklist or leave only permanent decisions in
-  `README.md`, `docs/architecture.md`, or `AGENTS.md`.
+- `docs/testing.md` records automated evidence, the manual player matrix, accessibility
+  notes, and performance measurements.
+- When work finishes, remove completed checklist items and leave only permanent decisions in
+  `README.md`, `docs/roadmap.md`, or `AGENTS.md`.
 
 ## Definition of done
 
@@ -134,5 +139,5 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Tests and linters pass.
 - English source text and Dutch translation are both complete.
 - No absolute paths, no secrets, no local data in the repository.
-- Relevant docs are updated, including `docs/roadmap.md` or `docs/TASKS.md` when scope
-  changed.
+- Relevant docs are updated, including `docs/roadmap.md`, `docs/TASKS.md`, or
+  `docs/testing.md` when scope or evidence changed.

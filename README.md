@@ -9,13 +9,13 @@ does not record audio, download tracks, or play video.
 
 ## Status
 
-The workspace, local server, typed frontend, media providers, lyrics lookup, library,
-watcher, local API, player UI, library browser, and Studio editor are implemented and
-hardened. The server binds to `127.0.0.1` by default, validates `Host`/`Origin`, and sends
-browser hardening headers. Packaging is the next phase and starts after the owner's local
-acceptance run.
+The rewrite is implemented: Rust backend, strict TypeScript player, library, and Studio, plus a
+Tauri 2 desktop shell. The shell starts the same local server and opens it in a native window;
+the browser fallback remains fully supported. The server binds to `127.0.0.1`, validates
+`Host`/`Origin`, and sends browser hardening headers.
 
-See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan.
+Current work is owner acceptance, finetuning, a real Windows SMTC run, and packaging. See
+`docs/roadmap.md` for product direction and `docs/TASKS.md` for the remaining execution plan.
 
 ## Requirements
 
@@ -27,37 +27,21 @@ See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan
 
 ## Run locally
 
-Build the frontend, then start the server:
+Install the frontend dependencies once:
 
 ```bash
 npm install --prefix web
-npm run build --prefix web
-cargo run -p nico-karaoke-server
 ```
 
-Open <http://127.0.0.1:8770/>. The server tries the next free port when `8770` is busy.
-
-The default frontend directory is `web/dist` relative to the current working directory. Run
-the server from the repository root, or set `NICO_KARAOKE_WEB` to an absolute or relative path.
-
-For frontend development, run the Vite server and the Rust server side by side:
-
-```bash
-cargo run -p nico-karaoke-server
-npm run dev --prefix web
-```
-
-Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
-
-To run the native desktop window:
+Then start the native window:
 
 ```bash
 npm run app
 ```
 
-That builds the frontend and starts the Tauri shell. The shell starts the same local server
-itself, opens a window at its bound `127.0.0.1` URL, and uses the same data directory and log
-file as the browser build. Closing the window stops the process and its server.
+That builds the frontend and starts the Tauri shell. The shell starts the local server itself,
+opens a window at its bound `127.0.0.1` URL, and uses the same data directory and log file as
+the browser build. Closing the window stops the process and its server.
 
 For frontend hot reload inside the native window:
 
@@ -66,10 +50,27 @@ npm run app:hmr
 ```
 
 This starts Vite and the shell together, with the shell's own server on port `8770`. Keep that
-port free; the Vite proxy targets it. The manual equivalents remain
-`cargo run -p nico-karaoke-desktop` after `npm run build --prefix web`, and
-`NICO_KARAOKE_WEBVIEW_URL=http://localhost:5173 cargo run -p nico-karaoke-desktop` with Vite
-already running.
+port free; the Vite proxy targets it.
+
+The browser fallback uses the same server:
+
+```bash
+npm run build --prefix web
+cargo run -p nico-karaoke-server
+```
+
+Open <http://127.0.0.1:8770/>. The server tries the next free port when `8770` is busy. The
+default frontend directory is `web/dist` relative to the current working directory; run the
+server from the repository root, or set `NICO_KARAOKE_WEB` to an absolute or relative path.
+
+For browser development, run the server and Vite side by side:
+
+```bash
+cargo run -p nico-karaoke-server
+npm run dev --prefix web
+```
+
+Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
 
 TypeScript is pinned to the 6.0.x line because `typescript-eslint` currently supports
 TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7.
@@ -88,7 +89,7 @@ Command-line options:
 | --- | --- |
 | `--host <addr>` | address to bind: an IP literal or `localhost` (default `127.0.0.1`) |
 | `--port <port>` | first port to try (default `8770`; `0` picks a free port) |
-| `--browser` | force browser launching (wired in a later phase) |
+| `--browser` | requested browser launch; automatic opening is not implemented yet |
 | `--no-open` | start the server without opening anything |
 | `-h`, `--help` | show usage |
 | `-V`, `--version` | show the version |
@@ -104,9 +105,9 @@ two files:
 A manual `.lrc` edit wins over the JSON copy. Metadata-only updates keep that manual text.
 Files are written atomically. The legacy Python library is not read or migrated.
 
-The data directory also contains `nico-karaoke.log` for windowless builds. At startup a file
-of 5 MiB or more is rotated to `.1`; three backups are kept. Use `NICO_KARAOKE_DATA` to point
-the app at another directory.
+The data directory also contains `nico-karaoke.log` for the desktop and windowless builds. At
+startup a file of 5 MiB or more is rotated to `.1`; three backups are kept. Use
+`NICO_KARAOKE_DATA` to point the app at another directory.
 
 ## Lyrics lookup
 
@@ -163,12 +164,12 @@ explicit save.
 - Timeline: time ruler, one marker per line, a moving playhead, zoom from 5 to 120 px/s, fit,
   click-to-seek, and drag-to-retime. Marker labels appear only when they fit.
 - Lines: inline time and text editing, re-sorting on a time change, add line, add `♪` music
-  marker, play a line, and delete. Undo covers structural changes and text edits.
+  marker, jump to a line, and delete. Undo covers structural changes and text edits.
 - Inspector: nudges, take current time, preview the line with pre-roll/post-roll, toggle a
-  music marker, delete, and tap mode.
-- Tap mode: counts down, plays from the start, assigns the current time to each line on
-  Space/Enter or a tap, applies a configurable correction (default −0.2 s), and supports
-  Backspace.
+  music marker, and delete.
+- Tap mode in the transport bar: counts down, plays from the start, shows surrounding lines,
+  assigns the current time to each line on Space/Enter or a tap, applies a configurable
+  correction (default −0.2 s), and supports Backspace.
 - Raw LRC: view and replace the whole text. Parsing happens on the server so the editor and
   player share one parser.
 - Legacy `[end:]` tags are converted to `♪` markers on open where there is a real gap; they
@@ -243,9 +244,11 @@ through a package override.
 ```text
 crates/core/       domain logic and configuration
 crates/platform/   MPRIS and SMTC boundary
-crates/server/     local Axum server and static assets
+crates/server/     local Axum server, runtime, and static assets
+src-tauri/         Tauri 2 desktop shell
 web/               Vite + strict TypeScript UI
-docs/              roadmap, tasks, and design notes
+scripts/           local developer helpers
+docs/              roadmap, current tasks, and testing evidence
 ```
 
 ## Licence
