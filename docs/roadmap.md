@@ -48,7 +48,7 @@ See `README.md` for usage and `docs/testing.md` for evidence and known gaps.
 
 ## Release readiness
 
-- Owner acceptance run in development, followed by finetuning.
+- Release acceptance run in development, followed by finetuning.
 - Real Windows SMTC run with a media application before a Windows release.
 - Packaged Tauri builds with the frontend embedded or shipped as a resource, so the app runs
   from any working directory and without a repository checkout.
@@ -64,7 +64,7 @@ See `README.md` for usage and `docs/testing.md` for evidence and known gaps.
 
 Nico Karaoke is a normal desktop app. Nothing in the product needs Qt or a rewrite to run on
 Omarchy; this work is packaging and desktop integration, not a port. Treat it as a later
-distribution step after owner acceptance and the Windows run.
+distribution step after release acceptance and the Windows run.
 
 - Embed the web assets, or install them as a package resource. The executable-relative
   fallback already works from any working directory, but a bundled resource path and a real

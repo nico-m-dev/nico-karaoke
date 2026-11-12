@@ -3,12 +3,11 @@
 Current execution plan. Product direction lives in `docs/roadmap.md`; verified evidence lives
 in `docs/testing.md`.
 
-Status: rewrite delivered. Owner acceptance, the Windows SMTC run, and packaging remain.
+Status: rewrite delivered. Release acceptance, the Windows SMTC run, and packaging remain.
 
-## Owner acceptance (owner)
+## Release acceptance
 
-- [ ] Owner acceptance run in dev: use the app end to end locally and confirm packaging may
-  start. This box belongs to the owner; agents wait until it is checked.
+- [ ] Acceptance run in dev: use the app end to end locally and confirm packaging may start.
 - [ ] Studio acceptance: transport while editing, play/pause state, timeline, tap mode,
   save/dirty handling, raw LRC, and the library round-trip.
 

@@ -105,7 +105,7 @@ The Tauri 2 shell loads the built UI from the local Axum server, which it starts
   binary or under `../share/nico-karaoke/web`; checked from a temporary directory with a copied
   binary and assets.
 - HMR starts without a prior `web/dist` build when `NICO_KARAOKE_WEBVIEW_URL` is set; the
-  startup path was exercised. A full HMR session with a running Vite server remains for owner
+  startup path was exercised. A full HMR session with a running Vite server remains for release
   acceptance.
 - A non-loopback `--host` is rejected with exit code 2 before the listener binds.
 - A missing frontend build shows a GTK error dialog when the app is launched without a
@@ -146,7 +146,7 @@ and `web/src/studio/transport.test.ts`. A headless Chromium run against a real `
 confirmed that one click flips the control immediately and the player follows, that a
 double-click counts once, that a simulated `can_play`/metadata/key drop on the same player no
 longer swallows the click, and that a marker seek moves the playhead forward without a backward
-step. A full owner acceptance pass on the Studio remains.
+step. A full release acceptance pass on the Studio remains.
 
 ## Manual player matrix
 

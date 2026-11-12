@@ -14,7 +14,7 @@ Tauri 2 desktop shell. The shell starts the same local server and opens it in a 
 the browser fallback remains fully supported. The server binds to `127.0.0.1`, validates
 `Host`/`Origin`, and sends browser hardening headers.
 
-Current work is owner acceptance, finetuning, a real Windows SMTC run, and packaging. See
+Current work is release acceptance, finetuning, a real Windows SMTC run, and packaging. See
 `docs/roadmap.md` for product direction and `docs/TASKS.md` for the remaining execution plan.
 
 ## Requirements

@@ -13,9 +13,7 @@ The app does **not** record audio, download tracks, play video, or require an ac
 
 The rewrite is implemented: Rust backend, strict TypeScript player, library, and Studio, a
 browser fallback, and a Tauri 2 desktop shell that starts the same local server. Remaining
-work is owner acceptance, finetuning, a real Windows SMTC run, and packaging.
-
-There is no remote yet. Work locally on `main` until a remote is agreed.
+work is release acceptance, finetuning, a real Windows SMTC run, and packaging.
 
 ## Language and writing rules
 
@@ -118,18 +116,17 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Do not commit generated media or icons unless the source and licence are documented.
 - Maintain `.gitignore` as the stack grows. In particular: `target/`, `node_modules/`,
   frontend build output, local data directories, logs, `.env` files, and OS/editor files.
-- Do not add a remote or push without explicit approval.
 
 ## Workflow
 
 - For a new feature, multi-file refactor, data migration, release, or anything that goes
   live, keep a temporary checklist in `docs/TASKS.md`, organised by the current workstream
-  (owner acceptance, verification, packaging, or an active follow-up).
+  (acceptance, verification, packaging, or an active follow-up).
 - `docs/roadmap.md` owns product scope and future ideas. `docs/TASKS.md` owns the current
   execution plan. Move items between them deliberately.
 - Before saying something works, run it. Static checks alone are not evidence of runtime
   behaviour.
-- Have a subagent read the diff and run the tests before calling large work done.
+- Have a reviewer or subagent read the diff and run the tests before calling large work done.
 - `docs/testing.md` records automated evidence, the manual player matrix, accessibility
   notes, and performance measurements.
 - When work finishes, remove completed checklist items and leave only permanent decisions in
