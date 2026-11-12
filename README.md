@@ -29,6 +29,10 @@ Nico Karaoke follows the song you are playing in YouTube, Spotify, or another me
 shows its lyrics line by line in a clean window. It does not record audio, download tracks, or
 require an account.
 
+<p align="center">
+  <img src="docs/screenshots/player.png" alt="The player showing synchronised lyrics, with the current line filling green" width="820">
+</p>
+
 ## What it does
 
 - Follows the song playing in your browser or media player, on Linux and Windows.
@@ -56,6 +60,19 @@ require an account.
 Open an item in the **Studio** to correct its text or timing. The Studio never writes without an
 explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch.
 
+## Library and Studio
+
+The Library keeps every saved lyric and puts the current song first. Open the Studio to fix a
+line or retime a song; tap mode lets you time a whole song by pressing Space at each line.
+
+<p align="center">
+  <img src="docs/screenshots/library.png" alt="The library listing saved lyrics with the current song first" width="480">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/studio.png" alt="The Studio with the timeline, lyric lines, and inspector" width="820">
+</p>
+
 ## What you need
 
 - **Linux:** a desktop player that publishes MPRIS metadata. Most players and browser media
@@ -78,6 +95,9 @@ The `library/` folder contains one `.lrc` and one `.json` file per saved song. T
 holds `nico-karaoke.log` and its backups. Lyrics are requested from LRCLIB when needed; nothing
 is uploaded and there is no account, telemetry, analytics, or remote logging.
 
+On Windows, `%LOCALAPPDATA%` already resolves to your user profile; the `nico` in the middle is
+the app's organization folder, not your username.
+
 Set `NICO_KARAOKE_DATA` to use a different data directory (development and portable use).
 
 ## If something does not work
@@ -89,8 +109,6 @@ Set `NICO_KARAOKE_DATA` to use a different data directory (development and porta
 - **The lyrics are out of sync:** open the Studio and nudge the line or use tap mode.
 - **Something else:** open an issue on GitHub with the app version, your OS, the player, and
   what you expected.
-
-<!-- Screenshots: add docs/screenshots/player.png (hero), library.png, and studio.png here. -->
 
 ## For developers
 

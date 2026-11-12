@@ -1,6 +1,6 @@
 # README screenshots
 
-Planned captures for the repository README:
+Captures used in the repository README:
 
 | File | Shot |
 | --- | --- |
@@ -13,6 +13,10 @@ Planned captures for the repository README:
 - Use a demo or public-domain song with self-written or public-domain lyrics. Do not show
   third-party logos, YouTube chrome, album art, or personal data.
 - Use the dark theme and the same window size for every shot; crop the OS title bar.
-- Save as PNG at 2x for a readable large image; keep each file under about 500 KB.
-- The README should embed the player shot full width and the library and Studio shots side by
-  side.
+- Use a viewport around 1440 px wide and let the README scale it down; keep each file under
+  about 500 KB.
+- The README embeds the player shot full width, then the library shot and the Studio shot below
+  it.
+
+The committed screenshots use a fictional demo library. The song titles, artist names, and
+lyrics in them were written for these captures; no third-party lyrics or artwork are shown.
