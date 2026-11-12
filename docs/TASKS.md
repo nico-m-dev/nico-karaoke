@@ -265,6 +265,7 @@ Acceptance:
 - [x] The webview URL override only accepts local `http` URLs; remote content is refused.
 - [x] Workspace Rust builds do not require `web/dist`; the runtime checks for it before opening a window.
 - [x] YouTube and Spotify links open in the system browser instead of an empty webview.
+- [x] Root `npm run app` and `npm run app:hmr` entries cover the production-like and HMR flows.
 
 ## Phase 10 — Packaging
 

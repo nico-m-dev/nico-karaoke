@@ -49,26 +49,27 @@ npm run dev --prefix web
 
 Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
 
-To run the native desktop window, build the frontend first and start the Tauri shell:
+To run the native desktop window:
 
 ```bash
-npm run build --prefix web
-cargo run -p nico-karaoke-desktop
+npm run app
 ```
 
-The desktop shell starts the same local server itself, opens a window at its bound
-`127.0.0.1` URL, and uses the same data directory and log file as the browser build. Closing
-the window stops the process and its server.
+That builds the frontend and starts the Tauri shell. The shell starts the same local server
+itself, opens a window at its bound `127.0.0.1` URL, and uses the same data directory and log
+file as the browser build. Closing the window stops the process and its server.
 
-For frontend hot reload inside the native window, start Vite and point the shell at it while
-its own server stays on port `8770`:
+For frontend hot reload inside the native window:
 
 ```bash
-npm run dev --prefix web
-NICO_KARAOKE_WEBVIEW_URL=http://localhost:5173 cargo run -p nico-karaoke-desktop
+npm run app:hmr
 ```
 
-Keep port `8770` free in that mode because the Vite proxy targets it.
+This starts Vite and the shell together, with the shell's own server on port `8770`. Keep that
+port free; the Vite proxy targets it. The manual equivalents remain
+`cargo run -p nico-karaoke-desktop` after `npm run build --prefix web`, and
+`NICO_KARAOKE_WEBVIEW_URL=http://localhost:5173 cargo run -p nico-karaoke-desktop` with Vite
+already running.
 
 TypeScript is pinned to the 6.0.x line because `typescript-eslint` currently supports
 TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7.
