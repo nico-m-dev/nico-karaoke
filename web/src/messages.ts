@@ -16,11 +16,18 @@ const ERROR_KEYS: Record<string, MessageKey> = {
   track_changed: "player.error.track_changed",
   media_unavailable: "player.error.media_unavailable",
   invalid_value: "player.error.invalid_value",
+  invalid_duration: "player.error.invalid_value",
+  invalid_source: "player.error.invalid_value",
+  missing_position: "player.error.invalid_value",
+  missing_delta: "player.error.invalid_value",
+  unknown_action: "player.error.request_failed",
   lyrics_too_long: "player.error.lyrics_too_long",
   library_error: "player.error.library_error",
   lyrics_empty: "player.error.lyrics_empty",
   no_original: "player.error.no_original",
   invalid_key: "player.error.invalid_key",
+  not_found: "player.error.lyrics_not_found",
+  invalid_response: "player.error.request_failed",
   request_failed: "player.error.request_failed",
 };
 

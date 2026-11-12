@@ -21,11 +21,15 @@ export type Anchor = {
 };
 
 const MUSIC_MARKERS = /^[\s♪♫♬♩🎵🎶·•…\-–—]*$/u;
-const MUSIC_WORDS = /^(?:instrumental|instrumentaal|interlude|muziek|music|solo|gitaarsolo)$/i;
+const MUSIC_WORDS = /^(?:instrumental|instrumentaal|interlude)$/i;
+// "Solo" and "Music" are plausible lyric words, so only treat them as a marker when they are
+// clearly labelled, for example "(Solo)".
+const MUSIC_LABELS =
+  /^[([（](?:solo|music|muziek|gitaarsolo|instrumental|instrumentaal|interlude)[)\])]$/i;
 
 export function isMusicLine(text: string): boolean {
   const value = text.trim();
-  return !value || MUSIC_MARKERS.test(value) || MUSIC_WORDS.test(value);
+  return !value || MUSIC_MARKERS.test(value) || MUSIC_WORDS.test(value) || MUSIC_LABELS.test(value);
 }
 
 /** Last line whose start time is at or before `time`, or -1 before the first line. */

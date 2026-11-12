@@ -50,6 +50,7 @@
   "library.synced": "synced",
   "library.plain": "plain",
   "library.lines": "{count} lines",
+  "library.lines_one": "1 line",
   "library.source.lrclib": "LRCLIB",
   "library.source.manual": "manual",
   "library.source.tap": "tapped",

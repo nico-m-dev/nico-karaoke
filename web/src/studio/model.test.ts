@@ -112,6 +112,15 @@ describe("serialization", () => {
       ]).lines,
     ).toHaveLength(3);
   });
+
+  it("keeps metadata and drops an offset that was already applied", () => {
+    const text = serializeLines(
+      [{ id: "a", t: 1, text: "First" }],
+      ["[ar:Artist]", "[offset:+500]"],
+      ["Intro"],
+    );
+    expect(text).toBe("[ar:Artist]\nIntro\n[00:01.00] First");
+  });
 });
 
 describe("line operations", () => {
@@ -185,5 +194,9 @@ describe("timelineDuration", () => {
   it("falls back to the last line plus a margin", () => {
     expect(timelineDuration(null, [{ id: "a", t: 40, text: "x" }])).toBe(55);
     expect(timelineDuration(null, [])).toBe(30);
+  });
+
+  it("keeps lines that run past a known track length on the canvas", () => {
+    expect(timelineDuration(120, [{ id: "a", t: 140, text: "x" }])).toBe(155);
   });
 });

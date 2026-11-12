@@ -85,6 +85,9 @@ describe("line timing", () => {
     expect(isMusicLine("♪")).toBe(true);
     expect(isMusicLine("Instrumental")).toBe(true);
     expect(isMusicLine("instrumentaal")).toBe(true);
+    expect(isMusicLine("(Solo)")).toBe(true);
+    expect(isMusicLine("Solo")).toBe(false);
+    expect(isMusicLine("Music")).toBe(false);
     expect(isMusicLine("Text")).toBe(false);
   });
 });

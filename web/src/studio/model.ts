@@ -96,8 +96,25 @@ export function sortLines<T extends { t: number | null; text: string }>(lines: T
   });
 }
 
-export function serializeLines(lines: EditorLine[]): string {
+export function serializeLines(
+  lines: EditorLine[],
+  metadata: string[] = [],
+  extras: string[] = [],
+): string {
   const output: string[] = [];
+  for (const line of metadata) {
+    const value = line.trim();
+    // `[offset:]` was applied to the timestamps while parsing; writing it again would shift
+    // the whole file twice.
+    if (value && !/^\[offset:/i.test(value)) {
+      output.push(value);
+    }
+  }
+  for (const line of extras) {
+    if (line.trim()) {
+      output.push(line.trim());
+    }
+  }
   for (const line of lines) {
     if (line.t === null) {
       if (line.text.trim()) {
@@ -255,7 +272,7 @@ export function timelineDuration(trackLength: number | null, lines: EditorLine[]
   }, 0);
   const fromLines = last + 15;
   if (trackLength !== null && Number.isFinite(trackLength) && trackLength > 0) {
-    return Math.max(trackLength, 1);
+    return Math.max(trackLength, fromLines, 1);
   }
   return Math.max(fromLines, 30);
 }

@@ -120,7 +120,9 @@ textarea:focus-visible {
 
 .line {
   position: relative;
-  margin: 0.42em 0;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.42em auto;
   color: var(--muted);
   font-size: var(--line-font);
   font-weight: 600;
@@ -220,12 +222,22 @@ textarea:focus-visible {
   transform: translateY(-0.6rem);
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 380ms ease,
+    transform 380ms ease,
+    visibility 0s linear 380ms;
 }
 
 .stage.chrome-hidden .bar.bottom {
   transform: translateY(0.6rem);
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 380ms ease,
+    transform 380ms ease,
+    visibility 0s linear 380ms;
 }
 
 .dot {

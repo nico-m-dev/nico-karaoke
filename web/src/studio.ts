@@ -13,6 +13,7 @@ import {
   setPlayback,
   togglePlayback,
   type LibraryItemResponse,
+  type LyricsSource,
   type Now,
 } from "./api";
 import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
@@ -66,6 +67,7 @@ import {
   updateLineRowSelection,
   updateLineTimeInput,
   updateMarkerSelection,
+  updateMarkerText,
   updateMarkerTime,
   updatePlayhead,
   type TimelineElements,
@@ -143,9 +145,13 @@ let boundArtist: string | null = null;
 let item: LibraryItemResponse | null = null;
 let now: Now | null = null;
 let lines: EditorLine[] = [];
+let metadata: string[] = [];
+let extras: string[] = [];
+let source: LyricsSource = "manual";
 let selectedId: string | null = null;
 let nextId = 1;
 let dirty = false;
+let leaving = false;
 let busy = false;
 let fetching = false;
 let migratedNotice = false;
@@ -156,6 +162,7 @@ let anchor: Anchor | null = null;
 let anchorTrack = "";
 let pollBusy = false;
 let pollOffline = false;
+let nextRecovery = 0;
 let frameScheduled = false;
 let previewTimer: number | null = null;
 let previewing = false;
@@ -186,7 +193,9 @@ async function boot(): Promise<void> {
   }
 
   window.setInterval(() => {
-    void poll();
+    if (!document.hidden) {
+      void poll();
+    }
   }, 500);
   void poll();
 }
@@ -226,11 +235,18 @@ async function loadCurrent(): Promise<void> {
     fatalMessage = null;
     key = null;
     item = null;
-    boundTrackId = state.track?.track_id ?? null;
-    boundSignature = state.lyrics.signature;
-    boundTitle = state.track?.title ?? null;
-    boundArtist = state.track?.artist ?? null;
+    if (state.track) {
+      bindCurrentTrack(state);
+    } else {
+      boundTrackId = null;
+      boundSignature = null;
+      boundTitle = null;
+      boundArtist = null;
+    }
     lines = [];
+    metadata = [];
+    extras = [];
+    source = "manual";
     selectedId = null;
     dirty = false;
     migratedNotice = false;
@@ -261,6 +277,9 @@ function applyItem(result: LibraryItemResponse): void {
   boundTitle = null;
   boundArtist = null;
   item = result;
+  metadata = result.lyrics.metadata ?? [];
+  extras = result.lyrics.extras ?? [];
+  source = result.lyrics.source ?? "manual";
   const adopted = makeEditorLines(result.lyrics.lines);
   lines = adopted.lines;
   nextId = adopted.nextId;
@@ -275,6 +294,18 @@ function applyItem(result: LibraryItemResponse): void {
   flushPreview();
 }
 
+/** Bind a new, unsaved document to whatever is playing now. */
+function bindCurrentTrack(state: Now): void {
+  const track = state.track;
+  if (!track) {
+    return;
+  }
+  boundTrackId = track.track_id;
+  boundSignature = state.lyrics.signature;
+  boundTitle = track.title;
+  boundArtist = track.artist;
+}
+
 function showFatal(message: string): void {
   fatalMessage = message;
   key = null;
@@ -284,6 +315,9 @@ function showFatal(message: string): void {
   boundArtist = null;
   item = null;
   lines = [];
+  metadata = [];
+  extras = [];
+  source = "manual";
   selectedId = null;
   dirty = false;
   migratedNotice = false;
@@ -442,6 +476,9 @@ function renderInspectorView(): void {
 
 function updateDirty(): void {
   dirty = true;
+  if (source !== "tap") {
+    source = "manual";
+  }
   renderHeader();
 }
 
@@ -453,7 +490,7 @@ async function save(): Promise<void> {
     showToast(t(language, now?.track ? "studio.notice.track_changed" : "studio.notice.no_track"));
     return;
   }
-  const text = serializeLines(lines);
+  const text = serializeLines(lines, metadata, extras);
   if (!text.trim()) {
     showToast(t(language, "player.error.lyrics_empty"));
     return;
@@ -462,13 +499,21 @@ async function save(): Promise<void> {
   renderHeader();
   try {
     const updated = key
-      ? await saveLibraryItem(key, text)
-      : await saveCurrentLyrics(text, boundTrackId ?? undefined, boundSignature ?? undefined);
+      ? await saveLibraryItem(key, text, source)
+      : await saveCurrentLyrics(
+          text,
+          boundTrackId ?? undefined,
+          boundSignature ?? undefined,
+          source,
+        );
     key = updated.lyrics.record_key ?? key;
     boundTrackId = null;
     boundSignature = null;
     boundTitle = null;
     boundArtist = null;
+    metadata = updated.lyrics.metadata ?? metadata;
+    extras = updated.lyrics.extras ?? extras;
+    source = updated.lyrics.source ?? source;
     item = { ...updated, current: isCurrent() };
     fatalMessage = null;
     dirty = false;
@@ -524,6 +569,8 @@ function startDrag(id: string, event: PointerEvent): void {
     return;
   }
   const before = snapshot();
+  const wasDirty = dirty;
+  const wasSource = source;
   const startX = event.clientX;
   const startTime = line.t;
   let moved = false;
@@ -545,26 +592,55 @@ function startDrag(id: string, event: PointerEvent): void {
     updateMarkerTime(els.markers, id, nextTime, scale);
     updateLineTimeInput(els.lineList, id, nextTime);
     updateInspectorTime(els.inspector, nextTime);
-    dirty = true;
-    renderHeader();
+    updateDirty();
   };
 
-  const onUp = () => {
+  let finished = false;
+  const cleanup = () => {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
     document.body.classList.remove("dragging");
-    if (moved) {
-      undoStack = pushUndo(undoStack, before);
-      lines = sortLines(lines);
-      renderStructure();
-      scrollLineIntoView(els.lineList, selectedId);
-    } else {
-      selectLine(id, true);
-    }
   };
+  const finish = (commit: boolean) => {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    cleanup();
+    if (!moved) {
+      if (commit) {
+        selectLine(id, true);
+      }
+      return;
+    }
+    if (!commit) {
+      lines = before.lines.map((line) => ({ ...line }));
+      selectedId = before.selectedId;
+      dirty = wasDirty;
+      source = wasSource;
+      renderStructure();
+      return;
+    }
+    undoStack = pushUndo(undoStack, before);
+    lines = sortLines(lines);
+    renderStructure();
+    scrollLineIntoView(els.lineList, selectedId);
+  };
+  const onUp = () => finish(true);
+  const onCancel = () => finish(false);
 
+  // Capture the pointer so releasing outside the window still finishes the drag.
+  if (event.currentTarget instanceof Element) {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is an enhancement; the window listeners still handle the common case.
+    }
+  }
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
 }
 
 function addLine(): void {
@@ -627,8 +703,9 @@ function setLineText(id: string, value: string): void {
     editSnapshot = snapshot();
   }
   lines = updateLine(lines, id, { text: value });
+  source = "manual";
   dirty = true;
-  renderTimelineView();
+  updateMarkerText(els.markers, id, value, language);
   renderInspectorView();
   renderHeader();
 }
@@ -736,6 +813,9 @@ async function previewLine(): Promise<void> {
   try {
     await setPlayback("pause");
     await seekPlayer(start);
+    await setPlayback("play");
+    // Start the local clock only after the player accepted play, otherwise the preview runs
+    // ahead by the round-trip latency.
     anchor = {
       pos: start,
       at: performance.now(),
@@ -743,7 +823,6 @@ async function previewLine(): Promise<void> {
       rate,
       ok: true,
     };
-    await setPlayback("play");
     ensureFrame();
     previewTimer = window.setTimeout(() => {
       stopAnchor();
@@ -755,6 +834,7 @@ async function previewLine(): Promise<void> {
       renderInspectorView();
     }, 3000);
   } catch (error) {
+    stopAnchor();
     previewing = false;
     showToast(errorMessage(language, error));
     renderInspectorView();
@@ -829,6 +909,12 @@ async function beginTapping(): Promise<void> {
     if (tapPhase !== "countdown") {
       return;
     }
+    await setPlayback("play");
+    if (tapPhase !== "countdown") {
+      void setPlayback("pause").catch(() => undefined);
+      return;
+    }
+    // Seed the local clock after play was accepted so taps are not systematically early.
     anchor = {
       pos: 0,
       at: performance.now(),
@@ -836,11 +922,6 @@ async function beginTapping(): Promise<void> {
       rate: now?.track?.rate ?? 1,
       ok: true,
     };
-    await setPlayback("play");
-    if (tapPhase !== "countdown") {
-      void setPlayback("pause").catch(() => undefined);
-      return;
-    }
     ensureFrame();
     tapPhase = "tapping";
     updateTapUI();
@@ -878,6 +959,7 @@ function performTap(): void {
   tapSession = next.session;
   lines = updateLine(lines, line.id, { t: time }, false);
   selectedId = line.id;
+  source = "tap";
   dirty = true;
   renderHeader();
   renderTimelineView();
@@ -906,6 +988,7 @@ function tapBackspace(): void {
     updateLineTimeInput(els.lineList, line.id, original ?? null);
     renderTimelineView();
   }
+  source = "tap";
   dirty = true;
   renderHeader();
   updateTapUI();
@@ -1041,9 +1124,12 @@ async function applyRawText(): Promise<void> {
     const adopted = makeEditorLines(parsed.lines, nextId);
     undoStack = pushUndo(undoStack, snapshot());
     lines = adopted.lines;
+    metadata = parsed.metadata ?? [];
+    extras = parsed.extras ?? [];
     nextId = adopted.nextId;
     selectedId = lines[0]?.id ?? null;
     migratedNotice = adopted.migrated > 0;
+    source = "manual";
     dirty = true;
     renderStructure();
     syncRawText();
@@ -1060,7 +1146,7 @@ function syncRawText(): void {
   if (document.activeElement === els.rawText || !els.rawPanel.open) {
     return;
   }
-  els.rawText.value = serializeLines(lines);
+  els.rawText.value = serializeLines(lines, metadata, extras);
 }
 
 async function fetchFromLrclib(): Promise<void> {
@@ -1138,7 +1224,9 @@ function bindEvents(): void {
   els.back.addEventListener("click", (event) => {
     if (dirty && !window.confirm(t(language, "studio.discard_confirm"))) {
       event.preventDefault();
+      return;
     }
+    leaving = true;
   });
   els.play.addEventListener("click", () => {
     void onPlay();
@@ -1177,7 +1265,7 @@ function bindEvents(): void {
     void applyRawText();
   });
   els.rawReset.addEventListener("click", () => {
-    els.rawText.value = serializeLines(lines);
+    els.rawText.value = serializeLines(lines, metadata, extras);
   });
 
   els.tapMode.addEventListener("click", openTap);
@@ -1203,7 +1291,7 @@ function bindEvents(): void {
     renderTimelineView();
   });
   window.addEventListener("beforeunload", (event) => {
-    if (dirty) {
+    if (dirty && !leaving) {
       event.preventDefault();
       event.returnValue = "";
     }
@@ -1260,8 +1348,22 @@ async function seekToTime(time: number): Promise<void> {
 function onKeyDown(event: KeyboardEvent): void {
   const typing = isTyping(event.target);
   const command = event.ctrlKey || event.metaKey;
+  const target = event.target;
+  const editingField =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
 
-  if (tapPhase !== null) {
+  if (tapPhase !== null && event.key === "Escape") {
+    event.preventDefault();
+    closeTap();
+    return;
+  }
+
+  // The tap shortcuts own Space, Enter, and Backspace, but not while the correction field has
+  // focus. Escape is handled above so it always leaves the overlay.
+  if (tapPhase !== null && !editingField) {
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
       if (tapPhase === "ready") {
@@ -1274,11 +1376,6 @@ function onKeyDown(event: KeyboardEvent): void {
     if (event.key === "Backspace") {
       event.preventDefault();
       tapBackspace();
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeTap();
       return;
     }
   }
@@ -1309,7 +1406,10 @@ function onKeyDown(event: KeyboardEvent): void {
     event.preventDefault();
     const step = event.altKey ? 0.01 : event.shiftKey ? 0.5 : 0.1;
     const delta = event.key === "ArrowLeft" ? -step : step;
-    undoStack = pushUndo(undoStack, snapshot());
+    // Holding the key is one edit, not one undo entry per repeat.
+    if (!event.repeat) {
+      undoStack = pushUndo(undoStack, snapshot());
+    }
     lines = nudgeLine(lines, selectedId, delta);
     updateDirty();
     renderStructure();
@@ -1399,6 +1499,14 @@ async function poll(): Promise<void> {
       return;
     }
 
+    // A single failed boot or a deleted item must not leave the editor dead until a reload.
+    if (fatalMessage && !busy && Date.now() >= nextRecovery) {
+      nextRecovery = Date.now() + 5000;
+      fatalMessage = null;
+      await loadCurrent();
+      return;
+    }
+
     if (
       !key &&
       !fatalMessage &&
@@ -1421,6 +1529,13 @@ async function poll(): Promise<void> {
 async function refreshNow(): Promise<void> {
   const state = await getNow();
   now = state;
+  // A document opened before any track was playing must bind once one starts, otherwise Save
+  // keeps reporting a track change that never happened.
+  if (key === null && !fatalMessage && state.track) {
+    if (boundTrackId === null && boundSignature === null) {
+      bindCurrentTrack(state);
+    }
+  }
   updateAnchorFrom(state);
   renderTransport();
   renderHeader();
@@ -1474,11 +1589,11 @@ function isCurrent(): boolean {
   if (key) {
     return now?.lyrics.record_key === key;
   }
-  if (!boundTrackId || !now?.track) {
+  if ((!boundTrackId && !boundSignature) || !now?.track) {
     return false;
   }
   return (
-    now.track.track_id === boundTrackId &&
+    (!boundTrackId || now.track.track_id === boundTrackId) &&
     (boundSignature === null || now.lyrics.signature === boundSignature)
   );
 }

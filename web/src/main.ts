@@ -148,6 +148,8 @@ const emptyLyrics: Lyrics = {
   duration: null,
   text: "",
   lines: [],
+  metadata: [],
+  extras: [],
   lrclib_id: null,
   fetched_at: 0,
   updated_at: 0,
@@ -176,12 +178,22 @@ let selectionBusy = false;
 let offlineShown = false;
 let libraryData: LibraryResponse | null = null;
 let libraryOpener: HTMLElement | null = null;
+let libraryRequest = 0;
 let selectedKey: string | null = null;
 let detailItem: LibraryItemResponse | null = null;
 let detailBusy = false;
 
 function trackKey(track: Track | null): string {
+  return track ? `${track.player}|${track.track_id}|${track.title}|${track.artist}` : "";
+}
+
+/** Library refreshes only need the metadata identity, not a provider-specific track id. */
+function trackMetadataKey(track: Track | null): string {
   return track ? `${track.player}|${track.title}|${track.artist}` : "";
+}
+
+function lineCountLabel(count: number): string {
+  return count === 1 ? t(language, "library.lines_one") : t(language, "library.lines", { count });
 }
 
 function lyricsCacheKey(lyrics: Lyrics): string {
@@ -339,9 +351,9 @@ function placeholderText(lyrics: Lyrics): string {
     case "missing":
       return t(language, "player.lyrics.missing");
     case "error":
-      return lyrics.error === "lyrics_unavailable"
-        ? t(language, "player.lyrics.error")
-        : t(language, "player.lyrics.loading");
+      return lyrics.error === "lyrics_pending"
+        ? t(language, "player.lyrics.loading")
+        : t(language, "player.lyrics.error");
     default:
       return t(language, "player.lyrics.idle");
   }
@@ -508,9 +520,9 @@ function applyNow(next: Now): void {
   updatePlayButton(track);
   updateTime(livePosition());
 
-  if (trackKey(previous.track) !== trackKey(track) && !els.library.hidden) {
+  if (trackMetadataKey(previous.track) !== trackMetadataKey(track) && !els.library.hidden) {
     if (selectedKey && !detailBusy) {
-      void openDetail(selectedKey);
+      void openDetail(selectedKey, false);
     } else if (!selectedKey) {
       void loadLibrary();
     }
@@ -555,12 +567,21 @@ function renderPlayers(players: PlayerInfo[], track: Track | null): void {
   updatePlayers(players, track);
 }
 
+function chromeHasFocus(): boolean {
+  return (
+    document.activeElement instanceof Element && document.activeElement.closest(".bar") !== null
+  );
+}
+
 function showChrome(): void {
   els.stage.classList.remove("chrome-hidden");
   clearTimeout(chromeTimer);
   if (document.body.dataset.playing === "true" && els.library.hidden) {
     chromeTimer = window.setTimeout(() => {
-      els.stage.classList.add("chrome-hidden");
+      // Never hide the bar while one of its controls has keyboard focus.
+      if (!chromeHasFocus()) {
+        els.stage.classList.add("chrome-hidden");
+      }
     }, 3000);
   }
 }
@@ -698,17 +719,27 @@ async function refreshLibrary(): Promise<void> {
 }
 
 async function loadLibrary(): Promise<void> {
+  const request = ++libraryRequest;
   els.libraryCount.textContent = t(language, "player.library.loading");
   try {
-    libraryData = await getLibrary();
+    const data = await getLibrary();
+    if (request !== libraryRequest) {
+      return;
+    }
+    libraryData = data;
     if (selectedKey) {
       els.libraryCount.textContent = t(language, "player.library.count", {
-        count: libraryData.items.length,
+        count: data.items.length,
       });
     } else {
-      renderLibrary(libraryData);
+      renderLibrary(data);
     }
   } catch (error) {
+    if (request !== libraryRequest) {
+      return;
+    }
+    // A stale list must not reappear when the search box is used after a failed refresh.
+    libraryData = null;
     els.libraryCount.textContent = errorMessage(language, error);
     const hint = document.createElement("p");
     hint.className = "hint library-empty";
@@ -749,6 +780,7 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "library-item";
+  card.dataset.key = item.key;
   if (item.current) {
     card.classList.add("current");
   }
@@ -769,7 +801,7 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   const parts = [
     t(language, sourceLabelKey(item.source)),
     item.synced ? t(language, "library.synced") : t(language, "library.plain"),
-    t(language, "library.lines", { count: item.line_count }),
+    lineCountLabel(item.line_count),
     formatDate(item.updated_at),
   ];
   if (item.has_original) {
@@ -784,7 +816,7 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   return card;
 }
 
-async function openDetail(key: string): Promise<void> {
+async function openDetail(key: string, focusTitle = true): Promise<void> {
   if (detailBusy) {
     return;
   }
@@ -801,7 +833,7 @@ async function openDetail(key: string): Promise<void> {
       return;
     }
     detailItem = item;
-    renderDetail();
+    renderDetail(focusTitle);
   } catch (error) {
     if (selectedKey === key) {
       renderDetailError(errorMessage(language, error));
@@ -809,7 +841,7 @@ async function openDetail(key: string): Promise<void> {
   }
 }
 
-function renderDetail(): void {
+function renderDetail(focusTitle = true): void {
   if (!selectedKey || !detailItem) {
     return;
   }
@@ -843,7 +875,7 @@ function renderDetail(): void {
     item.current ? t(language, "player.library.current") : "",
     t(language, sourceLabelKey(lyrics.source ?? "manual")),
     lyrics.synced ? t(language, "library.synced") : t(language, "library.plain"),
-    t(language, "library.lines", { count: lyrics.lines.length }),
+    lineCountLabel(lyrics.lines.length),
     lyrics.duration ? formatTime(lyrics.duration) : "",
     formatDate(lyrics.updated_at),
     lyrics.offset ? t(language, "player.library.offset", { value: lyrics.offset }) : "",
@@ -877,7 +909,10 @@ function renderDetail(): void {
   actions.append(remove);
   els.libraryDetail.append(actions);
 
-  title.focus();
+  // A background refresh must not steal focus from the control the user is using.
+  if (focusTitle) {
+    title.focus();
+  }
 }
 
 function setDetailBusy(busy: boolean): void {
@@ -889,12 +924,19 @@ async function backToLibrary(): Promise<void> {
   if (detailBusy) {
     return;
   }
+  const key = selectedKey;
   selectedKey = null;
   detailItem = null;
   showLibraryList();
   if (libraryData) {
     renderLibrary(libraryData);
   }
+  const card = key
+    ? Array.from(els.libraryList.querySelectorAll<HTMLElement>(".library-item")).find(
+        (element) => element.dataset.key === key,
+      )
+    : undefined;
+  (card ?? els.libraryClose).focus();
 }
 
 async function deleteDetail(): Promise<void> {
@@ -1082,7 +1124,12 @@ function bind(): void {
       }
       event.preventDefault();
       void onPlay();
-    } else if (event.key.toLowerCase() === "f") {
+    } else if (
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "f"
+    ) {
       event.preventDefault();
       void toggleFullscreen();
     }
@@ -1094,6 +1141,12 @@ function bind(): void {
       showChrome();
     }
   });
+  document.addEventListener("focusin", () => {
+    showChrome();
+  });
+  document.addEventListener("focusout", () => {
+    showChrome();
+  });
 }
 
 bind();
@@ -1101,5 +1154,7 @@ setLanguage(language, false);
 document.body.dataset.state = "idle";
 void poll();
 window.setInterval(() => {
-  void poll();
+  if (!document.hidden) {
+    void poll();
+  }
 }, 400);

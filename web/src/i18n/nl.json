@@ -50,6 +50,7 @@
   "library.synced": "gesynchroniseerd",
   "library.plain": "zonder tijden",
   "library.lines": "{count} regels",
+  "library.lines_one": "1 regel",
   "library.source.lrclib": "LRCLIB",
   "library.source.manual": "handmatig",
   "library.source.tap": "ingetikt",

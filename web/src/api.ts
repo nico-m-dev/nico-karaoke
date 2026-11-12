@@ -25,8 +25,10 @@ export type Track = {
   rate: number;
 };
 
+export type LyricsSource = "lrclib" | "manual" | "tap";
+
 export type OriginalLyrics = {
-  source: string;
+  source: LyricsSource;
   fetched_at: number;
   lrclib_id: number | null;
   synced: boolean;
@@ -39,13 +41,15 @@ export type Lyrics = {
   record_key: string | null;
   synced: boolean;
   offset: number;
-  source: string | null;
+  source: LyricsSource | null;
   title: string;
   artist: string;
   album: string;
   duration: number | null;
   text: string;
   lines: LyricLine[];
+  metadata: string[];
+  extras: string[];
   lrclib_id: number | null;
   fetched_at: number;
   updated_at: number;
@@ -108,6 +112,9 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 5000): Pr
   });
 
   const payload: unknown = await response.json().catch(() => null);
+  if (response.ok && (payload === null || typeof payload !== "object")) {
+    throw new ApiError(response.status, "invalid_response");
+  }
   if (!response.ok) {
     const code =
       typeof payload === "object" &&
@@ -181,6 +188,8 @@ export function fetchLyrics(body: FetchRequest): Promise<Lyrics> {
 export type ParsedLyrics = {
   synced: boolean;
   lines: LyricLine[];
+  metadata: string[];
+  extras: string[];
 };
 
 export function parseLyrics(text: string): Promise<ParsedLyrics> {
@@ -203,13 +212,14 @@ export function saveCurrentLyrics(
   text: string,
   trackId?: string,
   signature?: string,
+  source: LyricsSource = "manual",
 ): Promise<LibraryItemResponse> {
   return request<LibraryItemResponse>("/api/lyrics", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       text,
-      source: "manual",
+      source,
       ...(trackId ? { track_id: trackId } : {}),
       ...(signature ? { signature } : {}),
     }),
@@ -219,7 +229,7 @@ export function saveCurrentLyrics(
 export function saveLibraryItem(
   key: string,
   text: string,
-  source = "manual",
+  source: LyricsSource = "manual",
 ): Promise<LibraryItemResponse> {
   return request<LibraryItemResponse>(`/api/library/${encodeURIComponent(key)}`, {
     method: "PUT",

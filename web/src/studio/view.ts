@@ -189,6 +189,27 @@ export function updatePlayhead(
   playhead.style.transform = `translateX(${xAtTime(position, scale)}px)`;
 }
 
+/** Update one marker's text without rebuilding the whole timeline. */
+export function updateMarkerText(
+  markers: HTMLElement,
+  id: string,
+  text: string,
+  language: Language,
+): void {
+  const marker = markers.querySelector<HTMLElement>(`.marker[data-id="${id}"]`);
+  if (!marker) {
+    return;
+  }
+  const music = isMusicMarker(text);
+  marker.classList.toggle("music", music);
+  const label = marker.querySelector<HTMLElement>(".marker-text");
+  if (label) {
+    label.textContent = music ? t(language, "studio.music") : text;
+  }
+  const time = marker.querySelector<HTMLElement>(".marker-time")?.textContent ?? "";
+  marker.title = `${time} ${text}`.trim();
+}
+
 export function updateMarkerTime(
   markers: HTMLElement,
   id: string,
