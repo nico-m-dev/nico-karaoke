@@ -135,8 +135,10 @@ cargo run -p nico-karaoke-platform --example media_probe
 ## Player
 
 The player follows the current track and keeps the active lyric on the centre line. The
-active line fills green until the next line or a `♪` break. Upcoming lines are lighter and
-past lines fade; unsynchronised lyrics fall back to a readable scrollable list.
+active line fills green until the next line or a `♪` break. A line that wraps over several
+visual lines fills in reading order, so a short last line does not turn green early. Upcoming
+lines are lighter and past lines fade; unsynchronised lyrics fall back to a readable
+scrollable list.
 
 | Input | Action |
 | --- | --- |

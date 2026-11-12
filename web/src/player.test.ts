@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fillClipPath,
   findActiveLine,
   fillProgress,
   formatClock,
@@ -89,6 +90,35 @@ describe("line timing", () => {
     expect(isMusicLine("Solo")).toBe(false);
     expect(isMusicLine("Music")).toBe(false);
     expect(isMusicLine("Text")).toBe(false);
+  });
+});
+
+describe("fill clip path", () => {
+  const wrapped = [
+    { left: 0, top: 0, width: 100, height: 20 },
+    { left: 10, top: 30, width: 40, height: 20 },
+  ];
+
+  it("keeps the simple clip for a single visual line", () => {
+    expect(fillClipPath([wrapped[0]!], 0.5)).toBeNull();
+  });
+
+  it("does not clip the full or empty state", () => {
+    expect(fillClipPath(wrapped, 0)).toBeNull();
+    expect(fillClipPath(wrapped, 1)).toBeNull();
+  });
+
+  it("fills the first line before touching the second", () => {
+    expect(fillClipPath(wrapped, 0.5)).toBe(`path("M0 0H70V20H0Z")`);
+  });
+
+  it("continues on the second line once the first is full", () => {
+    expect(fillClipPath(wrapped, 0.8)).toBe(`path("M0 0H100V20H0ZM10 30H22V50H10Z")`);
+  });
+
+  it("clamps out-of-range progress", () => {
+    expect(fillClipPath(wrapped, -1)).toBeNull();
+    expect(fillClipPath(wrapped, 2)).toBeNull();
   });
 });
 

@@ -93,6 +93,57 @@ export function fillProgress(
   return clamp((time - line.t) / span, 0, 1);
 }
 
+export type FillRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+/**
+ * Clip path for a lyric that wraps over more than one visual line. A single horizontal slice
+ * would colour a short last line completely while the first line is still filling, so follow
+ * the rendered line boxes in reading order instead.
+ */
+export function fillClipPath(rects: FillRect[], progress: number): string | null {
+  if (rects.length < 2) {
+    return null;
+  }
+  const total = rects.reduce((sum, rect) => sum + Math.max(0, rect.width), 0);
+  if (total <= 0) {
+    return null;
+  }
+  const clamped = clamp(progress, 0, 1);
+  if (clamped <= 0 || clamped >= 1) {
+    return null;
+  }
+
+  let remaining = clamped * total;
+  const parts: string[] = [];
+  for (const rect of rects) {
+    if (remaining <= 0) {
+      break;
+    }
+    const width = Math.max(0, rect.width);
+    if (width <= 0) {
+      continue;
+    }
+    const take = Math.min(width, remaining);
+    remaining -= take;
+    const left = roundCoordinate(rect.left);
+    const top = roundCoordinate(rect.top);
+    const right = roundCoordinate(rect.left + take);
+    const bottom = roundCoordinate(rect.top + rect.height);
+    parts.push(`M${left} ${top}H${right}V${bottom}H${left}Z`);
+  }
+
+  return parts.length > 0 ? `path("${parts.join("")}")` : null;
+}
+
+function roundCoordinate(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "0:00";

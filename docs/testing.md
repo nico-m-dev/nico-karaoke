@@ -124,6 +124,12 @@ confirmed that the active line stays centred and line changes scroll without the
 bar and transport stay visible while playing; the auto-hide was removed because it made the
 controls intermittently unreachable.
 
+A wrapped active line measures its visual line boxes and clips the green fill in reading order
+instead of applying one horizontal slice across the whole block. Headless Chromium at 1000 px
+and 620 px confirmed that the second visual line stays unfilled until the sweep reaches it, also
+after a resize, and that a past line turns fully green. The clip computation has unit tests in
+`web/src/player.test.ts`.
+
 The Studio transport sends an explicit `play` or `pause` based on the intended state instead of
 a blind toggle, and shows that state immediately while a poll may still describe the previous
 one. It also queues a single click that arrives while a control request is in flight instead of

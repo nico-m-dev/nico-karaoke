@@ -18,6 +18,7 @@ import {
 import { applyTranslations, detectLanguage, rememberLanguage, t, type Language } from "./i18n";
 import { errorMessage, sourceLabelKey } from "./messages";
 import {
+  fillClipPath,
   fillProgress,
   findActiveLine,
   formatClock,
@@ -27,6 +28,7 @@ import {
   targetPosition,
   updateAnchor,
   type Anchor,
+  type FillRect,
 } from "./player";
 import headLogo from "./assets/nico-head.png";
 import { currentFirst, matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
@@ -165,6 +167,8 @@ let data: Now = { track: null, players: [], lyrics: emptyLyrics };
 let anchor: Anchor | null = null;
 let lines: Lyrics["lines"] = [];
 let lineEls: HTMLElement[] = [];
+let fillEls: (HTMLElement | null)[] = [];
+let fillGeometries = new Map<number, FillRect[]>();
 let activeIndex = -2;
 let activeDone = false;
 let plainMode = false;
@@ -316,6 +320,8 @@ function updateTime(position: number | null): void {
 function rebuildLyrics(lyrics: Lyrics): void {
   lines = lyrics.lines;
   lineEls = [];
+  fillEls = [];
+  fillGeometries = new Map();
   activeIndex = -2;
   activeDone = false;
   offsetSeconds = Number.isFinite(lyrics.offset) ? lyrics.offset : 0;
@@ -324,6 +330,7 @@ function rebuildLyrics(lyrics: Lyrics): void {
 
   if (lyrics.state !== "found" || lines.length === 0) {
     lineEls = [];
+    fillEls = [];
     const placeholder = document.createElement("p");
     placeholder.className = "placeholder";
     placeholder.textContent = placeholderText(lyrics);
@@ -345,8 +352,9 @@ function rebuildLyrics(lyrics: Lyrics): void {
     base.textContent = line.text || "♪";
     element.append(base);
 
+    let fill: HTMLElement | null = null;
     if (lyrics.synced && !instrumental && !plainMode) {
-      const fill = document.createElement("span");
+      fill = document.createElement("span");
       fill.className = "fill";
       fill.setAttribute("aria-hidden", "true");
       fill.textContent = line.text;
@@ -354,6 +362,7 @@ function rebuildLyrics(lyrics: Lyrics): void {
     }
 
     lineEls.push(element);
+    fillEls.push(fill);
     return element;
   });
 
@@ -455,11 +464,54 @@ function markLines(index: number, done: boolean): void {
     } else if (lineIndex !== index) {
       element.style.setProperty("--p", "0%");
     }
+    // The wrapped-line clip path belongs to the line that is actively filling. A past or
+    // future line uses the plain percentage clip again.
+    const fill = fillEls[lineIndex];
+    if (fill && (past || lineIndex !== index) && fill.style.clipPath) {
+      fill.style.removeProperty("clip-path");
+    }
   });
 }
 
 function setFill(index: number, progress: number): void {
-  lineEls[index]?.style.setProperty("--p", `${(progress * 100).toFixed(2)}%`);
+  const element = lineEls[index];
+  if (!element) {
+    return;
+  }
+  element.style.setProperty("--p", `${(progress * 100).toFixed(2)}%`);
+  const fill = fillEls[index];
+  if (!fill) {
+    return;
+  }
+  const path = fillClipPath(fillGeometry(index, fill), progress);
+  if (path) {
+    if (fill.style.clipPath !== path) {
+      fill.style.clipPath = path;
+    }
+  } else if (fill.style.clipPath) {
+    fill.style.removeProperty("clip-path");
+  }
+}
+
+/** Measure a fill layer once per layout; wrapped lyrics need one rect per visual line. */
+function fillGeometry(index: number, fill: HTMLElement): FillRect[] {
+  const cached = fillGeometries.get(index);
+  if (cached) {
+    return cached;
+  }
+  const box = fill.getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNodeContents(fill);
+  const rects = Array.from(range.getClientRects())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => ({
+      left: rect.left - box.left,
+      top: rect.top - box.top,
+      width: rect.width,
+      height: rect.height,
+    }));
+  fillGeometries.set(index, rects);
+  return rects;
 }
 
 let scrollFrame: number | null = null;
@@ -619,6 +671,8 @@ function goIdle(next: Now): void {
   lyricsKey = "";
   lines = [];
   lineEls = [];
+  fillEls = [];
+  fillGeometries = new Map();
   els.stage.classList.remove("plain");
   document.body.dataset.state = "idle";
   document.body.dataset.playing = "false";
@@ -1135,7 +1189,10 @@ function bind(): void {
     if (plainMode) {
       return;
     }
+    // Wrapping can change on resize, so the measured fill line boxes are stale.
+    fillGeometries.clear();
     if (activeIndex >= 0) {
+      updateLyricsFrame();
       centerLine(activeIndex, true);
     } else if (lineEls.length > 0) {
       centerLine(0, true);
