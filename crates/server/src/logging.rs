@@ -5,6 +5,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use nico_karaoke_core::LOG_FILE_NAME;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer, fmt};
+
 /// Rotate once the current log passes 5 MiB.
 pub const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 /// Keep the current file plus three older files.
@@ -78,6 +85,56 @@ fn backup_path(path: &Path, index: usize) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(format!(".{index}"));
     PathBuf::from(name)
+}
+
+/// Initialise stderr plus the rotating file log used by both frontends.
+pub fn init_tracing(data_dir: &std::path::Path) -> Option<WorkerGuard> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("nico_karaoke_server=info,nico_karaoke_desktop=info,tower_http=warn")
+    });
+
+    if let Err(error) = std::fs::create_dir_all(data_dir) {
+        eprintln!("warning: cannot create the data directory: {error}");
+        fmt().with_env_filter(filter).with_target(false).init();
+        return None;
+    }
+
+    if let Err(error) = rotate_if_needed(&data_dir.join(LOG_FILE_NAME), MAX_LOG_BYTES, LOG_BACKUPS)
+    {
+        eprintln!("warning: cannot rotate the log file: {error}");
+    }
+
+    let file_appender = match tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::NEVER)
+        .filename_prefix(LOG_FILE_NAME)
+        .build(data_dir)
+    {
+        Ok(appender) => appender,
+        Err(error) => {
+            eprintln!("warning: cannot create the log file: {error}");
+            fmt().with_env_filter(filter).with_target(false).init();
+            return None;
+        }
+    };
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(
+            fmt::layer()
+                .with_target(false)
+                .with_writer(std::io::stderr)
+                .with_filter(filter),
+        )
+        .with(
+            fmt::layer()
+                .with_target(false)
+                .with_ansi(false)
+                .with_writer(file_writer)
+                .with_filter(LevelFilter::INFO),
+        )
+        .init();
+
+    Some(guard)
 }
 
 #[cfg(test)]

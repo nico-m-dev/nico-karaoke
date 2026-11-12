@@ -21,7 +21,8 @@ See `docs/roadmap.md` for product scope and `docs/TASKS.md` for the current plan
 
 - Rust stable
 - Node.js 22.12 or newer (LTS recommended)
-- On Linux, a running media player that publishes MPRIS metadata
+- On Linux, a running media player that publishes MPRIS metadata, and WebKitGTK 4.1 with GTK 3
+  for the desktop window
 - On Windows, an application that publishes SMTC metadata
 
 ## Run locally
@@ -47,6 +48,27 @@ npm run dev --prefix web
 ```
 
 Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
+
+To run the native desktop window, build the frontend first and start the Tauri shell:
+
+```bash
+npm run build --prefix web
+cargo run -p nico-karaoke-desktop
+```
+
+The desktop shell starts the same local server itself, opens a window at its bound
+`127.0.0.1` URL, and uses the same data directory and log file as the browser build. Closing
+the window stops the process and its server.
+
+For frontend hot reload inside the native window, start Vite and point the shell at it while
+its own server stays on port `8770`:
+
+```bash
+npm run dev --prefix web
+NICO_KARAOKE_WEBVIEW_URL=http://localhost:5173 cargo run -p nico-karaoke-desktop
+```
+
+Keep port `8770` free in that mode because the Vite proxy targets it.
 
 TypeScript is pinned to the 6.0.x line because `typescript-eslint` currently supports
 TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7.

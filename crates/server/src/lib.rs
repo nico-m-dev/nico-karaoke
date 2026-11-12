@@ -4,6 +4,7 @@ pub mod api;
 pub mod dto;
 pub mod logging;
 pub mod lrclib_http;
+pub mod runtime;
 pub mod watcher;
 
 use std::path::PathBuf;

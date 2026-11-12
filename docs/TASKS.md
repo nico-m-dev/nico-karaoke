@@ -235,6 +235,34 @@ Acceptance:
 - [x] Stop animation frames while playback is paused and halve Studio polling.
 - [x] Add tests for metadata matching and blank-line music markers; re-run the live checks.
 
+## Phase 10a — Tauri shell (local)
+
+Goal: the app in its own native window, loading the built frontend through the same local
+server. No packaging, bundling, Updater, GitHub, or Actions work in this step.
+
+- [x] Make the Axum startup reusable so the browser binary and the desktop shell share the
+  same config, library, watcher, and server setup.
+- [x] Add `src-tauri/` with Tauri 2, a build script, and a minimal window configuration.
+- [x] Start the local server automatically inside Tauri and open the window at its bound
+  `127.0.0.1` URL.
+- [x] Default to the built `web/dist` (production-like). Allow an explicit dev override to
+  the Vite URL for HMR.
+- [x] Reuse the data directory and log file from the browser build.
+- [x] Keep `cargo run -p nico-karaoke-server` and the browser fallback working unchanged.
+- [x] Build and launch locally, verify the window, server startup, close behaviour, and a
+  clean shutdown without orphaning the server.
+- [x] Leave icons, `.deb`/AppImage, embedded assets, Windows packaging, and the owner's
+  release checkbox for Phase 10.
+
+Acceptance:
+
+- [x] `cargo run -p nico-karaoke-server` still serves the browser UI and `/editor`.
+- [x] `cargo run -p nico-karaoke-desktop` starts the server, opens a native window titled
+  `Nico Karaoke`, and loads the built UI at `127.0.0.1:8770` (or the next free port).
+- [x] The desktop window uses the same data directory and log file.
+- [x] Stopping the process closes the server with it; no orphaned listener remains.
+- [x] The desktop icon is documented as a local placeholder.
+
 ## Phase 10 — Packaging
 
 Before packaging starts, the owner runs the app in development and confirms it is ready:

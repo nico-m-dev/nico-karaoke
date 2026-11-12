@@ -1,0 +1,18 @@
+[package]
+name = "nico-karaoke-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Native desktop shell for Nico Karaoke"
+
+[dependencies]
+anyhow.workspace = true
+nico-karaoke-core = { path = "../crates/core" }
+nico-karaoke-server = { path = "../crates/server" }
+tauri = { version = "2", features = [] }
+tracing.workspace = true
+tracing-appender.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
