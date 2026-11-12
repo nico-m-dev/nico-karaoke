@@ -300,8 +300,8 @@ function rebuildLyrics(lyrics: Lyrics): void {
   activeIndex = -2;
   activeDone = false;
   offsetSeconds = Number.isFinite(lyrics.offset) ? lyrics.offset : 0;
-  els.track.style.transform = "none";
-  els.track.classList.remove("instant");
+  stopScroll();
+  els.viewport.scrollTop = 0;
 
   if (lyrics.state !== "found" || lines.length === 0) {
     lineEls = [];
@@ -443,6 +443,47 @@ function setFill(index: number, progress: number): void {
   lineEls[index]?.style.setProperty("--p", `${(progress * 100).toFixed(2)}%`);
 }
 
+let scrollFrame: number | null = null;
+let scrollFrom = 0;
+let scrollTarget = 0;
+let scrollStart = 0;
+
+function stopScroll(): void {
+  if (scrollFrame !== null) {
+    cancelAnimationFrame(scrollFrame);
+    scrollFrame = null;
+  }
+}
+
+function scrollViewportTo(target: number, instant: boolean): void {
+  stopScroll();
+  const maximum = Math.max(0, els.viewport.scrollHeight - els.viewport.clientHeight);
+  const top = Math.max(0, Math.min(target, maximum));
+  const ratio = window.devicePixelRatio || 1;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (instant || reduce || Math.abs(top - els.viewport.scrollTop) < 1) {
+    els.viewport.scrollTop = Math.round(top * ratio) / ratio;
+    return;
+  }
+
+  scrollFrom = els.viewport.scrollTop;
+  scrollTarget = top;
+  scrollStart = performance.now();
+  const step = (now: number) => {
+    const progress = Math.min(1, (now - scrollStart) / 420);
+    const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    const value = scrollFrom + (scrollTarget - scrollFrom) * eased;
+    els.viewport.scrollTop = Math.round(value * ratio) / ratio;
+    if (progress < 1) {
+      scrollFrame = requestAnimationFrame(step);
+    } else {
+      scrollFrame = null;
+    }
+  };
+  scrollFrame = requestAnimationFrame(step);
+}
+
 function centerLine(index: number, instant = false): void {
   if (plainMode) {
     return;
@@ -451,18 +492,15 @@ function centerLine(index: number, instant = false): void {
   if (!line) {
     return;
   }
-  if (instant) {
-    els.track.classList.add("instant");
-    requestAnimationFrame(() => els.track.classList.remove("instant"));
-  }
-  const y = line.offsetTop + line.offsetHeight / 2;
-  const center = els.viewport.clientHeight / 2;
-  // Fractional CSS pixels plus fractional scaling (for example 1.25) make WebKitGTK round
-  // glyph positions differently on every frame, which reads as shaking text. Snap the offset
-  // to a device pixel and use a 3D transform so the whole track moves as one layer.
-  const ratio = window.devicePixelRatio || 1;
-  const offset = Math.round((center - y) * ratio) / ratio;
-  els.track.style.transform = `translate3d(0, ${offset}px, 0)`;
+
+  // Scroll the viewport natively instead of moving the track with a CSS transform.
+  // WebKitGTK rounds fractional transform offsets differently on every frame at fractional
+  // scaling (for example 1.25), which made the lyrics visibly jump. The scroll animation
+  // below also snaps every step to a device pixel.
+  const lineBox = line.getBoundingClientRect();
+  const viewportBox = els.viewport.getBoundingClientRect();
+  const lineCenter = lineBox.top - viewportBox.top + els.viewport.scrollTop + lineBox.height / 2;
+  scrollViewportTo(lineCenter - els.viewport.clientHeight / 2, instant);
 }
 
 function applyNow(next: Now): void {
@@ -567,7 +605,8 @@ function goIdle(next: Now): void {
   els.controls.hidden = true;
   updateTrackTexts(null);
   els.track.replaceChildren();
-  els.track.style.transform = "none";
+  stopScroll();
+  els.viewport.scrollTop = 0;
   renderPlayers(next.players, null);
 }
 

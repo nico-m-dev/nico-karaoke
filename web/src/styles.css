@@ -109,14 +109,8 @@ textarea:focus-visible {
   flex-direction: column;
   align-items: stretch;
   gap: 0.15rem;
-  padding: 18vh var(--line-pad);
-  backface-visibility: hidden;
-  transition: transform 480ms cubic-bezier(0.22, 0.8, 0.3, 1);
-  will-change: transform;
-}
-
-.track.instant {
-  transition: none;
+  /* Half of the 72vh viewport, so the first and last line can be centred by scrolling. */
+  padding: 36vh var(--line-pad);
 }
 
 .line {
@@ -729,10 +723,8 @@ body[data-state="playing"] .idle {
 }
 
 .stage.plain .track {
-  transform: none !important;
   padding-top: 1rem;
   padding-bottom: 2rem;
-  transition: none;
 }
 
 .stage.plain .centerline {
