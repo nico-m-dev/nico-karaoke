@@ -152,8 +152,8 @@ reachable and nothing fades in or out.
 ## Library
 
 The library opens from the player and lists every saved text. Search filters by title,
-artist, or album. Each item shows its source, sync state, line count, update date, current
-badge, and whether an original is kept.
+artist, or album. The current track is listed first. Each item shows its source, sync state,
+line count, update date, current badge, and whether an original is kept.
 
 Open an item to preview its saved text, open it in the Studio, delete it, or search for it
 on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.

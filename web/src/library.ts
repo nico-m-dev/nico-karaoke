@@ -13,6 +13,11 @@ export function matchesLibraryQuery(
   );
 }
 
+/** Put the currently playing item first; the sort is stable, so the rest keeps its order. */
+export function currentFirst<T extends { current: boolean }>(items: T[]): T[] {
+  return [...items].sort((left, right) => Number(right.current) - Number(left.current));
+}
+
 export function youtubeSearchUrl(title: string, artist: string): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(
     `${title} ${artist}`.trim(),

@@ -29,7 +29,7 @@ import {
   type Anchor,
 } from "./player";
 import headLogo from "./assets/nico-head.png";
-import { matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
+import { currentFirst, matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) {
@@ -801,7 +801,7 @@ function renderLibrary(library: LibraryResponse): void {
   });
 
   const query = els.librarySearch.value.trim().toLocaleLowerCase();
-  const items = library.items.filter((item) => matchesLibraryQuery(item, query));
+  const items = currentFirst(library.items.filter((item) => matchesLibraryQuery(item, query)));
 
   els.libraryCount.textContent = t(language, "player.library.count", {
     count: items.length,
