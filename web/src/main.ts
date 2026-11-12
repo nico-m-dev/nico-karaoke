@@ -457,7 +457,12 @@ function centerLine(index: number, instant = false): void {
   }
   const y = line.offsetTop + line.offsetHeight / 2;
   const center = els.viewport.clientHeight / 2;
-  els.track.style.transform = `translateY(${center - y}px)`;
+  // Fractional CSS pixels plus fractional scaling (for example 1.25) make WebKitGTK round
+  // glyph positions differently on every frame, which reads as shaking text. Snap the offset
+  // to a device pixel and use a 3D transform so the whole track moves as one layer.
+  const ratio = window.devicePixelRatio || 1;
+  const offset = Math.round((center - y) * ratio) / ratio;
+  els.track.style.transform = `translate3d(0, ${offset}px, 0)`;
 }
 
 function applyNow(next: Now): void {
