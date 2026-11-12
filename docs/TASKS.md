@@ -262,6 +262,7 @@ Acceptance:
 - [x] The desktop window uses the same data directory and log file.
 - [x] Stopping the process closes the server with it; no orphaned listener remains.
 - [x] The desktop icon is documented as a local placeholder.
+- [x] The webview URL override only accepts local `http` URLs; remote content is refused.
 
 ## Phase 10 — Packaging
 
