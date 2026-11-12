@@ -28,6 +28,7 @@ import {
   updateAnchor,
   type Anchor,
 } from "./player";
+import headLogo from "./assets/nico-head.png";
 import { matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
@@ -67,7 +68,9 @@ app.innerHTML = `
 
     <section class="idle" id="idle">
       <div class="idle-inner">
-        <p class="mark" aria-hidden="true">NK</p>
+        <div class="mark-wrap" aria-hidden="true">
+          <img class="mark" src="${headLogo}" alt="" />
+        </div>
         <p class="eyebrow" data-i18n="app.title"></p>
         <h1 data-i18n="player.idle.title"></h1>
         <p class="hint" data-i18n="player.idle.lead"></p>

@@ -259,4 +259,6 @@ docs/              roadmap, current tasks, and testing evidence
 
 ## Licence
 
-MIT. See `LICENSE`.
+The source code and documentation are MIT licensed; see `LICENSE`. The brand assets — the head
+mark in `web/src/assets/` and the app icon in `src-tauri/icons/` — are excluded and remain all
+rights reserved; see `NOTICE`.

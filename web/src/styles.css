@@ -363,20 +363,33 @@ body[data-state="playing"] .idle {
   text-align: center;
 }
 
+.mark-wrap {
+  position: relative;
+  width: clamp(6.4rem, 17vw, 8.8rem);
+  margin: 0 auto 1.4rem;
+  isolation: isolate;
+}
+
+.mark-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -20% -28%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(158, 206, 106, 0.52),
+    rgba(158, 206, 106, 0.14) 46%,
+    transparent 70%
+  );
+  filter: blur(1.5rem);
+}
+
 .mark {
-  display: grid;
-  width: 6.2rem;
-  height: 6.2rem;
-  margin: 0 auto 1.5rem;
-  place-items: center;
-  border: 1px solid rgba(158, 206, 106, 0.45);
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 35% 30%, rgba(158, 206, 106, 0.3), transparent 55%), var(--panel);
-  color: var(--accent);
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0.7rem 1.4rem rgba(0, 0, 0, 0.45));
 }
 
 .eyebrow {
