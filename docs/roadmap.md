@@ -52,8 +52,6 @@ See `README.md` for usage and `docs/testing.md` for evidence and known gaps.
 - Real Windows SMTC run with a media application before a Windows release.
 - Packaged Tauri builds with the frontend embedded or shipped as a resource, so the app runs
   from any working directory and without a repository checkout.
-- Full desktop icon set. Version metadata is single-sourced from Cargo, and the Windows
-  console window is already suppressed.
 - Linux and Windows release builds in CI, with WebKitGTK/GTK development packages installed
   on Linux runners.
 - Semantic version tags, a changelog, and GitHub Releases with downloadable binaries.

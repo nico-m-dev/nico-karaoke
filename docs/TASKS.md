@@ -20,8 +20,8 @@ Status: rewrite delivered. Owner acceptance, the Windows SMTC run, and packaging
 - [ ] Switch the Tauri shell from the runtime `frontendDist` URL to embedded assets or a
   packaged resource. The executable-relative fallback is verified; a bundled resource path and
   a real package still need a build.
-- [ ] Add the full desktop icon set. `tauri-build` requires `src-tauri/icons/icon.ico` for a
-  Windows build, so this also blocks the Windows CI job until the owner's logo work is ready.
+- [x] Add the full desktop icon set, including `src-tauri/icons/icon.ico`, so the Windows
+  resource build is no longer blocked by a missing icon.
 - [ ] Add Linux and Windows release builds to CI; WebKitGTK 4.1 and GTK 3 development packages
   are now installed on Linux runners.
 - [ ] Add semantic version tags, a changelog, and GitHub Releases with downloadable binaries.
