@@ -136,6 +136,5 @@
   "studio.notice.track_changed": "The track changed. This document belongs to the previous track; reload the Studio to edit the new one.",
   "player.offline_short": "Server offline",
   "studio.line_go": "Go to line {index}",
-  "studio.tap.button": "Tap mode",
-  "studio.notice.music_normalized": "Empty timed lines are shown as ♪ music markers. Save to keep that change."
+  "studio.tap.button": "Tap mode"
 }

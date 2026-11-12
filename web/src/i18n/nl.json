@@ -136,6 +136,5 @@
   "studio.notice.track_changed": "De track is gewijzigd. Dit document hoort bij de vorige track; herlaad de Studio om de nieuwe te bewerken.",
   "player.offline_short": "Server offline",
   "studio.line_go": "Ga naar regel {index}",
-  "studio.tap.button": "Meetikken",
-  "studio.notice.music_normalized": "Lege getimede regels worden als ♪-markeringen getoond. Sla op om die wijziging te bewaren."
+  "studio.tap.button": "Meetikken"
 }
