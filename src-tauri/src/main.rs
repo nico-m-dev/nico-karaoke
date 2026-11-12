@@ -3,14 +3,36 @@
 use std::sync::Mutex;
 
 use anyhow::{Context, anyhow};
-use nico_karaoke_core::AppConfig;
+use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, USAGE};
 use nico_karaoke_server::{logging, runtime};
+use tauri::webview::NewWindowResponse;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tracing_appender::non_blocking::WorkerGuard;
 
 struct LogGuard(#[allow(dead_code)] Mutex<Option<WorkerGuard>>);
 
 /// The shell only loads a local page. The override exists for Vite HMR, not remote content.
+fn open_external(url: &tauri::Url) {
+    if !matches!(url.scheme(), "http" | "https") {
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    let mut command = std::process::Command::new("xdg-open");
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler");
+        command
+    };
+    command.arg(url.as_str());
+    if let Err(error) = command.spawn() {
+        tracing::warn!(error = %error, "could not open the external link");
+    }
+}
+
 fn local_view_url(raw: &str) -> anyhow::Result<tauri::Url> {
     let url = raw.parse::<tauri::Url>()?;
     let local =
@@ -22,14 +44,32 @@ fn local_view_url(raw: &str) -> anyhow::Result<tauri::Url> {
 }
 
 fn main() {
+    let config = match AppConfig::from_env() {
+        Ok(config) => config,
+        Err(ConfigError::Help) => {
+            println!("{USAGE}");
+            return;
+        }
+        Err(ConfigError::Version) => {
+            println!("{APP_NAME} {APP_VERSION}");
+            return;
+        }
+        Err(error) => {
+            eprintln!("failed to read configuration: {error}");
+            std::process::exit(2);
+        }
+    };
+
     tauri::Builder::default()
-        .setup(|app| {
-            let config = AppConfig::from_env().map_err(|error| anyhow!(error))?;
+        .setup(move |app| {
             let guard = logging::init_tracing(&config.data_dir);
             app.manage(LogGuard(Mutex::new(guard)));
 
             let web_dir = runtime::web_dir();
             if !runtime::web_dir_is_ready(&web_dir) {
+                tracing::error!(
+                    "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
+                );
                 return Err(anyhow!(
                     "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
                 )
@@ -37,8 +77,18 @@ fn main() {
             }
 
             let prepared =
-                tauri::async_runtime::block_on(runtime::prepare(config.clone(), web_dir))
-                    .context("failed to start the local server")?;
+                match tauri::async_runtime::block_on(runtime::prepare(config.clone(), web_dir)) {
+                    Ok(prepared) => prepared,
+                    Err(error) => {
+                        tracing::error!(
+                            error = %format!("{error:#}"),
+                            "failed to start the local server"
+                        );
+                        return Err(error)
+                            .context("failed to start the local server")
+                            .map_err(Into::into);
+                    }
+                };
             let server_url = prepared.url();
             tracing::info!(
                 data = %config.data_dir.display(),
@@ -51,13 +101,20 @@ fn main() {
                 }
             });
 
-            let raw_url = std::env::var("NICO_KARAOKE_WEBVIEW_URL").unwrap_or(server_url);
+            let raw_url = std::env::var("NICO_KARAOKE_WEBVIEW_URL")
+                .ok()
+                .filter(|value| !value.is_empty())
+                .unwrap_or(server_url);
             let url = local_view_url(&raw_url)?;
             tracing::info!(url = %url, "opening window");
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Nico Karaoke")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(800.0, 560.0)
+                .on_new_window(|url, _features| {
+                    open_external(&url);
+                    NewWindowResponse::Deny
+                })
                 .build()?;
             Ok(())
         })

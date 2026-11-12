@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.nico.nicokaraoke",
   "build": {
-    "frontendDist": "../web/dist"
+    "frontendDist": "http://127.0.0.1:8770/"
   },
   "app": {
     "windows": [],

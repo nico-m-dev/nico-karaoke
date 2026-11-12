@@ -79,6 +79,19 @@ three-hour track:
 These are exploratory budgets, not hard guarantees. A fixed 60 fps performance gate remains a
 later roadmap item.
 
+## Native window
+
+The Tauri 2 shell loads the built UI from the local Axum server, which it starts itself.
+
+- Verified on Linux: window title, player, Studio, `/api/health`, port fallback when `8770` is
+  occupied, shared data directory and log file, clean shutdown with no orphaned listener, and
+  the Vite HMR override through `NICO_KARAOKE_WEBVIEW_URL`.
+- External YouTube/Spotify links are handed to the system browser instead of opening a second
+  webview.
+- The browser fallback and `cargo run -p nico-karaoke-server` remain unchanged.
+- Not verified here: the native window on Windows, bundled/assets packaging, icons, and the
+  release checklist. Those stay in Phase 10.
+
 ## Manual player matrix
 
 | Area | Linux | Windows |

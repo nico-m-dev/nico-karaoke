@@ -22,10 +22,6 @@ pub struct PreparedServer {
 }
 
 impl PreparedServer {
-    pub fn address(&self) -> SocketAddr {
-        self.address
-    }
-
     pub fn url(&self) -> String {
         format!("http://{}/", self.address)
     }

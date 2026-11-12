@@ -213,7 +213,7 @@ Nico Karaoke is a local lyrics follower, not a media player:
 - **[MVP]** Include the app icon and version metadata.
 - **[MVP]** Hide the console window on Windows; log to the data directory.
 - **[MVP]** GitHub Actions matrix for Linux and Windows: lint, test, build, upload artifact.
-- **[Next]** Tauri-based desktop shell with the same web UI.
+- **[Next]** Tauri-based desktop shell with the same web UI. The local shell exists; bundled packaging remains.
 - **[Next]** Git tags with semantic versions and a changelog.
 - **[Next]** GitHub Releases with bare binaries, not archive-only artifacts.
 - **[Next]** Show the version in the app.

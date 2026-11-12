@@ -2,7 +2,7 @@
 
 Temporary execution plan. Product scope and future ideas live in `docs/roadmap.md`.
 
-Status: Phase 9 complete on Linux. The Windows SMTC run and packaging wait for the owner.
+Status: Phase 10a (Tauri shell) complete. Packaging and the Windows SMTC run wait for the owner.
 
 ## Phase 1 — Foundation
 
@@ -263,6 +263,8 @@ Acceptance:
 - [x] Stopping the process closes the server with it; no orphaned listener remains.
 - [x] The desktop icon is documented as a local placeholder.
 - [x] The webview URL override only accepts local `http` URLs; remote content is refused.
+- [x] Workspace Rust builds do not require `web/dist`; the runtime checks for it before opening a window.
+- [x] YouTube and Spotify links open in the system browser instead of an empty webview.
 
 ## Phase 10 — Packaging
 
@@ -279,6 +281,6 @@ Then:
 - [ ] Embedded frontend assets in the release binary.
 - [ ] Linux and Windows release builds in CI.
 - [ ] Icon, version metadata, and no console window on Windows.
-- [ ] Tauri shell using the same core, API, and UI.
+- [x] Tauri shell using the same core, API, and UI (local shell delivered in Phase 10a).
 - [ ] Git tags, changelog, and GitHub Release assets.
 - [ ] Optional update notification, later.
