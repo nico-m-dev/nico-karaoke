@@ -153,6 +153,8 @@ let nextId = 1;
 let dirty = false;
 let leaving = false;
 let busy = false;
+let transportBusy = false;
+let nowSerial = 0;
 let fetching = false;
 let migratedNotice = false;
 let undoStack: EditorSnapshot[] = [];
@@ -407,7 +409,7 @@ function renderTransport(): void {
   const current = isCurrent();
   const track = now?.track;
   const playing = current && Boolean(track?.playing);
-  els.play.disabled = !current || !track?.can_play;
+  els.play.disabled = !current || !track?.can_play || transportBusy;
   els.play.textContent = playing ? "❚❚" : "▶";
   const label = t(language, playing ? "studio.pause" : "studio.play");
   els.play.title = label;
@@ -1305,15 +1307,23 @@ function bindEvents(): void {
 }
 
 async function onPlay(): Promise<void> {
+  if (transportBusy) {
+    return;
+  }
   if (!isCurrent()) {
     showToast(t(language, "studio.notice.not_current"));
     return;
   }
+  transportBusy = true;
+  renderTransport();
   try {
     await togglePlayback();
     await refreshNow();
   } catch (error) {
     showToast(errorMessage(language, error));
+  } finally {
+    transportBusy = false;
+    renderTransport();
   }
 }
 
@@ -1527,7 +1537,13 @@ async function poll(): Promise<void> {
 }
 
 async function refreshNow(): Promise<void> {
+  const serial = ++nowSerial;
   const state = await getNow();
+  // A poll that started before a play/seek/save must not overwrite the fresher state with
+  // its older response.
+  if (serial !== nowSerial) {
+    return;
+  }
   now = state;
   // A document opened before any track was playing must bind once one starts, otherwise Save
   // keeps reporting a track change that never happened.
