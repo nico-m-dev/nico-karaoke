@@ -1,23 +1,114 @@
-# Nico Karaoke
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/nico-head.png">
+    <img src="src-tauri/icons/128x128.png" alt="Nico Karaoke" width="96">
+  </picture>
+</p>
 
-Synchronised lyrics for whatever is playing in another application. The app reads the
-current track and position from MPRIS on Linux or SMTC on Windows, fetches lyrics from
-LRCLIB, and draws a line-by-line karaoke view in a local web interface.
+<h1 align="center">Nico Karaoke</h1>
 
-This repository is a clean Rust and TypeScript rewrite of an earlier Python application. It
-does not record audio, download tracks, or play video.
+<p align="center">
+  Karaoke lyrics for whatever is playing in another app.
+</p>
 
-## Status
+<p align="center">
+  <a href="../../releases">
+    <img src="https://img.shields.io/badge/Download-Linux-9ece6a?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux">
+  </a>
+  <a href="../../releases">
+    <img src="https://img.shields.io/badge/Download-Windows-9ece6a?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows">
+  </a>
+</p>
 
-The rewrite is implemented: Rust backend, strict TypeScript player, library, and Studio, plus a
-Tauri 2 desktop shell. The shell starts the same local server and opens it in a native window;
-the browser fallback remains fully supported. The server binds to `127.0.0.1`, validates
-`Host`/`Origin`, and sends browser hardening headers.
+<p align="center">
+  <a href="../../releases">All releases</a> ·
+  <a href="#for-developers">Build from source</a>
+</p>
 
-Current work is release acceptance, finetuning, a real Windows SMTC run, and packaging. See
-`docs/roadmap.md` for product direction and `docs/TASKS.md` for the remaining execution plan.
+Nico Karaoke follows the song you are playing in YouTube, Spotify, or another media player and
+shows its lyrics line by line in a clean window. It does not record audio, download tracks, or
+require an account.
 
-## Requirements
+## What it does
+
+- Follows the song playing in your browser or media player, on Linux and Windows.
+- Fetches synchronised lyrics from [LRCLIB](https://lrclib.net/); no account or API key.
+- Shows the active line filling green, including lines that wrap over several visual lines.
+- Keeps a searchable local library; the current song is listed first.
+- Includes a Studio for fixing text and timing, with tap mode and raw LRC editing.
+- Stays local: no audio capture, telemetry, analytics, or uploads.
+- English and Dutch interface.
+
+## How to use
+
+1. Install the app from the [Releases page](../../releases).
+2. Play a song in YouTube, Spotify, or another supported player.
+3. Open Nico Karaoke. It follows the song and finds the lyrics.
+4. Press Space to play or pause, F for fullscreen, or open the Library to browse saved lyrics.
+
+| Input | Action |
+| --- | --- |
+| `Space` | play / pause the followed player |
+| `F` | toggle fullscreen |
+| `Library` | open the searchable library |
+| `NL` / `EN` | switch language on the idle screen |
+
+Open an item in the **Studio** to correct its text or timing. The Studio never writes without an
+explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch.
+
+## What you need
+
+- **Linux:** a desktop player that publishes MPRIS metadata. Most players and browser media
+  sessions do.
+- **Windows:** an app that publishes SMTC metadata, such as the system media controls from a
+  supported player or browser.
+- An internet connection for the lyric lookup. Playback stays in your own player.
+- No account. The app only reads local player metadata and never captures audio.
+
+If more than one player is active, choose the one to follow in the top bar.
+
+## Your data and privacy
+
+Everything stays local:
+
+- Linux: `~/.local/share/nico-karaoke/`
+- Windows: `%LOCALAPPDATA%\nico\nico-karaoke\data\`
+
+The `library/` folder contains one `.lrc` and one `.json` file per saved song. The same folder
+holds `nico-karaoke.log` and its backups. Lyrics are requested from LRCLIB when needed; nothing
+is uploaded and there is no account, telemetry, analytics, or remote logging.
+
+Set `NICO_KARAOKE_DATA` to use a different data directory (development and portable use).
+
+## If something does not work
+
+- **No lyrics appear:** LRCLIB may not have that song. Open the Studio and use **Fetch**, or
+  check the title and artist in your player.
+- **The app does not follow my player:** make sure the player publishes MPRIS on Linux or SMTC
+  on Windows. With multiple players, pick one in the top bar.
+- **The lyrics are out of sync:** open the Studio and nudge the line or use tap mode.
+- **Something else:** open an issue on GitHub with the app version, your OS, the player, and
+  what you expected.
+
+<!-- Screenshots: add docs/screenshots/player.png (hero), library.png, and studio.png here. -->
+
+## For developers
+
+Nico Karaoke is a Rust workspace with a strict TypeScript UI and a Tauri 2 desktop shell. The
+browser fallback uses the same local server, so the core, API, and web UI do not depend on the
+desktop shell.
+
+### Stack
+
+- **Backend:** Rust stable, Tokio, Axum, Serde, Reqwest.
+- **Media:** MPRIS through `zbus` on Linux; SMTC through the `windows` crate on Windows. Both
+  sit behind a common provider trait.
+- **Frontend:** strict TypeScript with Vite. The player is framework-free so the lyrics view
+  can animate cheaply.
+- **Desktop shell:** Tauri 2 in `src-tauri`, sharing the server runtime in `crates/server`.
+- **Data:** one human-readable `.lrc` file and one `.json` metadata file per song.
+
+### Requirements
 
 - Rust stable
 - Node.js 22.12 or newer (LTS recommended)
@@ -25,7 +116,7 @@ Current work is release acceptance, finetuning, a real Windows SMTC run, and pac
   for the desktop window
 - On Windows, an application that publishes SMTC metadata
 
-## Run locally
+### Run locally
 
 Install the frontend dependencies once:
 
@@ -76,7 +167,7 @@ Vite proxies `/api` to the Rust server. Open the URL printed by Vite.
 TypeScript is pinned to the 6.0.x line because `typescript-eslint` currently supports
 TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7.
 
-## Configuration
+### Configuration
 
 | Setting | Environment variable | Default |
 | --- | --- | --- |
@@ -99,7 +190,7 @@ The desktop shell accepts only a loopback host (`127.0.0.1`, `::1`, or `localhos
 bind belongs to the server binary. The desktop shell also rejects `--browser` and `--no-open`
 because it always opens its own window.
 
-## Data
+### Data
 
 The app stores its library in the platform data directory, under `library/`. Each song has
 two files:
@@ -114,14 +205,14 @@ The data directory also contains `nico-karaoke.log` for the desktop and windowle
 startup a file of 5 MiB or more is rotated to `.1`; three backups are kept. Use
 `NICO_KARAOKE_DATA` to point the app at another directory.
 
-## Lyrics lookup
+### Lyrics lookup
 
 LRCLIB is queried without an API key. Titles and channel-style artist names are cleaned
 first. The lookup tries an exact match with the album, then without it, then searches within
 five seconds of the known duration. A synchronised result wins over plain text, and a miss is
 cached for one hour. A temporary network failure is not cached as a miss.
 
-## Media providers
+### Media providers
 
 Linux follows players through MPRIS on the session bus. Windows follows sessions through
 SMTC. Both expose the same provider trait and never capture audio.
@@ -132,7 +223,7 @@ With a player active, the developer probe prints what the backend sees:
 cargo run -p nico-karaoke-platform --example media_probe
 ```
 
-## Player
+### Player behaviour
 
 The player follows the current track and keeps the active lyric on the centre line. The
 active line fills green until the next line or a `♪` break. A line that wraps over several
@@ -140,18 +231,10 @@ visual lines fills in reading order, so a short last line does not turn green ea
 lines are lighter and past lines fade; unsynchronised lyrics fall back to a readable
 scrollable list.
 
-| Input | Action |
-| --- | --- |
-| `Space` | play / pause the followed player |
-| `F` | toggle fullscreen |
-| player picker | choose which player to follow |
-| `Library` | open the searchable library browser |
-| `NL` / `EN` | switch language from the idle screen |
-
 The top bar and the transport bar stay visible while playing, so the controls are always
 reachable and nothing fades in or out.
 
-## Library
+### Library
 
 The library opens from the player and lists every saved text. Search filters by title,
 artist, or album. The current track is listed first. Each item shows its source, sync state,
@@ -160,7 +243,7 @@ line count, update date, current badge, and whether an original is kept.
 Open an item to preview its saved text, open it in the Studio, delete it, or search for it
 on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.
 
-## Studio
+### Studio
 
 The Studio is a separate page, served at `/editor`. Open it from a library item, or visit
 `/editor` to edit the current track. It loads one song at a time and never writes without an
@@ -195,7 +278,7 @@ language switch in the app lives there.
 | `Backspace` (tap mode) | undo the last tap |
 | `Esc` (tap mode) | stop tapping |
 
-## Local API
+### Local API
 
 The local HTTP API returns JSON and never caches responses. It is only reachable from this
 machine: a missing or foreign `Host` and a foreign `Origin` are rejected, so binding the server
@@ -227,7 +310,7 @@ Errors use stable codes such as `forbidden_host`, `no_current_track`, `track_cha
 `signature` identifies the current track by normalised artist and title; `record_key`
 identifies the library file. `item_key` in lookup requests is a library key.
 
-## Checks
+### Checks
 
 The workspace includes the Tauri shell, so a full Linux test needs the WebKitGTK 4.1 and GTK 3
 development packages in addition to the runtime libraries.
@@ -249,7 +332,7 @@ See `docs/testing.md` for the manual player matrix, accessibility notes, and the
 measurements. Dependencies have no npm advisories; the ESLint toolchain pins a fixed `minimatch`
 through a package override.
 
-## Repository layout
+### Repository layout
 
 ```text
 crates/core/       domain logic and configuration
