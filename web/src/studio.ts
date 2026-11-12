@@ -11,7 +11,6 @@ import {
   saveLibraryItem,
   seekTo as seekPlayer,
   setPlayback,
-  togglePlayback,
   type LibraryItemResponse,
   type LyricsSource,
   type Now,
@@ -49,6 +48,12 @@ import {
   type TapSession,
 } from "./studio/tap";
 import { isStaleSeekSample, startSeekGuard, type SeekGuard } from "./studio/seek";
+import {
+  activeTransportIntent,
+  reconcileTransportIntent,
+  startTransportIntent,
+  type TransportIntent,
+} from "./studio/transport";
 import {
   DEFAULT_SCALE,
   canvasWidth,
@@ -405,6 +410,7 @@ const TRANSPORT_GRACE_MS = 2000;
 let transportReadyUntil = 0;
 let transportReadyDocument = "";
 let transportReadyTrack = "";
+let transportIntent: TransportIntent | null = null;
 
 /** The opened document that the transport belongs to. */
 function documentIdentity(): string {
@@ -424,9 +430,37 @@ function followedTrackIdentity(): string {
 function resetTransportState(): void {
   pendingSeek = null;
   transportQueued = false;
+  transportIntent = null;
   transportReadyUntil = 0;
   transportReadyDocument = "";
   transportReadyTrack = "";
+}
+
+/** The new play state shown immediately after a click, before a poll confirms it. */
+function currentTransportIntent(): TransportIntent | null {
+  transportIntent = activeTransportIntent(transportIntent, performance.now());
+  return transportIntent;
+}
+
+/** Play state for the playhead: the fresh intent wins over a poll from before the click. */
+function transportPlaying(): boolean {
+  return currentTransportIntent()?.playing ?? Boolean(now?.track?.playing);
+}
+
+function applyTransportIntent(playing: boolean): void {
+  const nowMs = performance.now();
+  transportIntent = startTransportIntent(playing, nowMs);
+  if (anchor) {
+    anchor = {
+      ...anchor,
+      pos: positionAt(anchor, nowMs) ?? anchor.pos,
+      at: nowMs,
+      playing,
+    };
+  }
+  if (playing) {
+    ensureFrame();
+  }
 }
 
 /**
@@ -454,7 +488,8 @@ function transportReady(): boolean {
 function renderTransport(): void {
   const current = isCurrent();
   const track = now?.track;
-  const playing = current && Boolean(track?.playing);
+  const intent = currentTransportIntent();
+  const playing = intent ? intent.playing : current && Boolean(track?.playing);
   // Never disable while a request is in flight: a second click is queued by onPlay instead of
   // being swallowed by the browser. Also bridge a single failed `can_play` or follow sample.
   els.play.disabled = !transportReady();
@@ -1367,12 +1402,23 @@ async function onPlay(detail = 1): Promise<void> {
     showToast(t(language, now?.track ? "studio.notice.not_current" : "studio.notice.no_track"));
     return;
   }
+  const track = now?.track;
+  if (!track) {
+    return;
+  }
+  // Explicit play/pause based on the intended state. A blind playpause loses the click when an
+  // impatient second click arrives before the first state reached the UI.
+  const wanted = !(currentTransportIntent()?.playing ?? track.playing);
+  const previousAnchor = anchor;
   transportBusy = true;
+  applyTransportIntent(wanted);
   renderTransport();
   try {
-    await togglePlayback();
+    await setPlayback(wanted ? "play" : "pause");
     await refreshNow();
   } catch (error) {
+    transportIntent = null;
+    anchor = previousAnchor;
     showToast(errorMessage(language, error));
   } finally {
     transportBusy = false;
@@ -1551,7 +1597,7 @@ function frame(): void {
   } else {
     updatePlayhead(els.playhead, null, scale);
   }
-  if (isCurrent() && now?.track?.playing && !document.hidden) {
+  if (isCurrent() && transportPlaying() && !document.hidden) {
     ensureFrame();
   }
 }
@@ -1610,6 +1656,15 @@ async function refreshNow(): Promise<void> {
     return;
   }
   now = state;
+  if (state.track) {
+    transportIntent = reconcileTransportIntent(
+      transportIntent,
+      state.track.playing,
+      performance.now(),
+    );
+  } else {
+    transportIntent = null;
+  }
   // A document opened before any track was playing must bind once one starts, otherwise Save
   // keeps reporting a track change that never happened.
   if (key === null && !fatalMessage && state.track) {
@@ -1621,7 +1676,7 @@ async function refreshNow(): Promise<void> {
   renderTransport();
   renderHeader();
   updatePlayhead(els.playhead, isCurrent() ? livePosition() : null, scale);
-  if (isCurrent() && state.track?.playing) {
+  if (isCurrent() && transportPlaying()) {
     ensureFrame();
   }
 }
@@ -1642,6 +1697,7 @@ function updateAnchorFrom(state: Now): void {
     return;
   }
   const nowMs = performance.now();
+  const playing = currentTransportIntent()?.playing ?? track.playing;
   if (pendingSeek && id === anchorTrack) {
     // A sample from before the seek must not pull the playhead back. Once the player reports
     // the requested position, settle on it instead of easing across the small offset a player
@@ -1653,7 +1709,7 @@ function updateAnchorFrom(state: Now): void {
     anchor = {
       pos: target,
       at: nowMs,
-      playing: track.playing,
+      playing,
       rate: track.rate > 0 && Number.isFinite(track.rate) ? track.rate : 1,
       ok: true,
     };
@@ -1661,7 +1717,7 @@ function updateAnchorFrom(state: Now): void {
     return;
   }
   pendingSeek = null;
-  anchor = updateAnchor(anchor, id === anchorTrack, target, track.playing, track.rate, nowMs);
+  anchor = updateAnchor(anchor, id === anchorTrack, target, playing, track.rate, nowMs);
   anchorTrack = id;
 }
 
