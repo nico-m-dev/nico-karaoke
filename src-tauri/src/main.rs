@@ -118,7 +118,7 @@ fn main() {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Nico Karaoke")
                 .inner_size(1280.0, 800.0)
-                .min_inner_size(800.0, 560.0)
+                .min_inner_size(360.0, 300.0)
                 .on_new_window(|url, _features| {
                     open_external(&url);
                     NewWindowResponse::Deny
