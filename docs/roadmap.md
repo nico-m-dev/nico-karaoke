@@ -136,8 +136,8 @@ distribution step after owner acceptance and the Windows run.
   transform; WebKitGTK at fractional scaling visibly jitters transformed text.
 - **Player chrome:** the top bar and transport stay visible while playing; there is no
   auto-hide.
-- **Licence:** MIT for the source code and documentation; the head mark and app icon are
-  reserved brand assets (see `NOTICE`).
+- **Licence:** MIT for the source code, documentation, and app icon; the head mark is a
+  reserved personal brand asset (see `NOTICE`).
 
 ## Open questions
 

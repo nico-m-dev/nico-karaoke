@@ -112,6 +112,9 @@ The Tauri 2 shell loads the built UI from the local Axum server, which it starts
   terminal; a terminal launch prints the same message and exits with code 2.
 - A second launch exits instead of starting a second window, server, and watcher.
 - The browser fallback and `cargo run -p nico-karaoke-server` remain unchanged.
+- Tauri embeds the app icon as the default window icon. Hyprland's window decoration on
+  Omarchy has no icon area, so it does not appear in the title bar; launchers and taskbars get
+  it through the packaged `.desktop` entry and installed icon.
 - Not verified here: the native window on Windows, bundled/assets packaging, the launcher
   icon on an installed package, and the release checklist. Those remain for packaging.
 

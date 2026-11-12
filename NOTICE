@@ -1,15 +1,14 @@
 Nico Karaoke — asset notice
 
-The MIT license in LICENSE covers the source code and documentation in this repository.
+The MIT license in LICENSE covers the source code, documentation, and the app icon in
+src-tauri/icons/.
 
-The following brand assets are excluded from that license and remain copyright (c) 2026
-Nico M, all rights reserved. They are included only so this application can display and ship
-its own identity:
+The following asset is excluded from that license and remains copyright (c) 2026 Nico M,
+all rights reserved. It is included only so this application can display and ship its own
+identity:
 
 - web/src/assets/nico-head.png — the Nico Karaoke head mark.
-- src-tauri/icons/ — the Nico Karaoke app icon and its generated sizes.
-- The SVG sources for either mark.
 
-No permission is granted to copy, modify, redistribute, or commercially use these assets
-separately, or to use them as a logo or trademark for another project. Distributing the
-application itself, with these assets included, is allowed.
+No permission is granted to copy, modify, redistribute, or commercially use the head mark
+separately, or to use it as a logo or trademark for another project. Distributing the
+application itself, with the head mark included, is allowed.
