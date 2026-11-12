@@ -1,17 +1,67 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::io::IsTerminal;
 use std::sync::Mutex;
 
-use anyhow::{Context, anyhow};
-use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError};
+use anyhow::anyhow;
+use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, LaunchMode};
 use nico_karaoke_server::{logging, runtime};
 use tauri::webview::NewWindowResponse;
+use tauri::window::Color;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tracing_appender::non_blocking::WorkerGuard;
 
 struct LogGuard(#[allow(dead_code)] Mutex<Option<WorkerGuard>>);
 
-const DESKTOP_USAGE: &str = "Usage: nico-karaoke-desktop [options]\n\nOptions:\n  --host <ip>     Address to bind (default 127.0.0.1; localhost is accepted)\n  --port <port>   First port to try (default 8770)\n  -h, --help      Show usage\n  -V, --version   Show the version";
+const DESKTOP_USAGE: &str = "Usage: nico-karaoke-desktop [options]\n\nOptions:\n  --host <ip>     Loopback address to bind (default 127.0.0.1; localhost is accepted)\n  --port <port>   First port to try (default 8770)\n  -h, --help      Show usage\n  -V, --version   Show the version";
+
+/// Show a startup error through GTK, which is already the window toolkit on Linux. Returns
+/// false when GTK cannot initialise; stderr already carries the message.
+#[cfg(target_os = "linux")]
+fn show_gtk_error(message: &str) -> bool {
+    use gtk::prelude::*;
+
+    if gtk::init().is_err() {
+        return false;
+    }
+    let dialog = gtk::MessageDialog::new(
+        None::<&gtk::Window>,
+        gtk::DialogFlags::MODAL,
+        gtk::MessageType::Error,
+        gtk::ButtonsType::Close,
+        message,
+    );
+    dialog.set_title(APP_NAME);
+    dialog.run();
+    dialog.close();
+    true
+}
+
+/// Report a startup failure even when the app was launched without a terminal. On Linux this
+/// uses a GTK dialog; on Windows the release build has no console at all.
+fn report_fatal(message: &str) {
+    eprintln!("{message}");
+
+    // A terminal already shows the message; a launcher start has no terminal, so use a dialog.
+    if std::io::stderr().is_terminal() {
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    let _ = show_gtk_error(message);
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+        use windows::core::HSTRING;
+
+        let text = HSTRING::from(message);
+        let title = HSTRING::from(APP_NAME);
+        unsafe {
+            MessageBoxW(None, &text, &title, MB_OK | MB_ICONERROR);
+        }
+    }
+}
 
 /// The shell only loads a local page. The override exists for Vite HMR, not remote content.
 fn open_external(url: &tauri::Url) {
@@ -63,25 +113,51 @@ fn main() {
             return;
         }
         Err(error) => {
-            eprintln!("failed to read configuration: {error}");
+            report_fatal(&format!("failed to read configuration: {error}"));
             std::process::exit(2);
         }
     };
 
-    tauri::Builder::default()
+    // The webview is a local page by design. Reject a public bind before opening the listener
+    // instead of panicking later when the window URL is built.
+    if !config.host.is_loopback() {
+        report_fatal(
+            "the desktop window only supports a loopback host (127.0.0.1 or ::1); use the server binary for other hosts",
+        );
+        std::process::exit(2);
+    }
+    if config.launch != LaunchMode::Auto {
+        report_fatal("--browser and --no-open are only supported by nico-karaoke-server");
+        std::process::exit(2);
+    }
+
+    let webview_override = std::env::var("NICO_KARAOKE_WEBVIEW_URL")
+        .ok()
+        .filter(|value| !value.is_empty());
+
+    let result = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(
+            |app, _arguments, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            },
+        ))
         .setup(move |app| {
             let guard = logging::init_tracing(&config.data_dir);
             app.manage(LogGuard(Mutex::new(guard)));
 
-            let web_dir = runtime::web_dir();
-            if !runtime::web_dir_is_ready(&web_dir) {
-                tracing::error!(
-                    "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
-                );
-                return Err(anyhow!(
-                    "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
-                )
-                .into());
+            let web_dir =
+                runtime::web_dir_with(app.path().resource_dir().ok().map(|dir| dir.join("web")));
+            // HMR serves the page from Vite, so a local build output is not required then.
+            if webview_override.is_none() && !runtime::web_dir_is_ready(&web_dir) {
+                let message =
+                    "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB";
+                tracing::error!("{message}");
+                report_fatal(message);
+                std::process::exit(2);
             }
 
             let prepared =
@@ -92,9 +168,8 @@ fn main() {
                             error = %format!("{error:#}"),
                             "failed to start the local server"
                         );
-                        return Err(error)
-                            .context("failed to start the local server")
-                            .map_err(Into::into);
+                        report_fatal(&format!("failed to start the local server: {error:#}"));
+                        std::process::exit(2);
                     }
                 };
             let server_url = prepared.url();
@@ -109,25 +184,38 @@ fn main() {
                 }
             });
 
-            let raw_url = std::env::var("NICO_KARAOKE_WEBVIEW_URL")
-                .ok()
-                .filter(|value| !value.is_empty())
-                .unwrap_or(server_url);
-            let url = local_view_url(&raw_url)?;
+            let raw_url = webview_override.unwrap_or(server_url);
+            let url = match local_view_url(&raw_url) {
+                Ok(url) => url,
+                Err(error) => {
+                    report_fatal(&format!("invalid webview URL: {error}"));
+                    std::process::exit(2);
+                }
+            };
             tracing::info!(url = %url, "opening window");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-                .title("Nico Karaoke")
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+                .title(APP_NAME)
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(360.0, 300.0)
+                .background_color(Color(8, 11, 10, 255))
+                .on_navigation(|url| local_view_url(url.as_str()).is_ok())
                 .on_new_window(|url, _features| {
                     open_external(&url);
                     NewWindowResponse::Deny
                 })
-                .build()?;
+                .build();
+            if let Err(error) = window {
+                report_fatal(&format!("could not open the window: {error}"));
+                std::process::exit(2);
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Nico Karaoke");
+        .run(tauri::generate_context!());
+
+    if let Err(error) = result {
+        report_fatal(&format!("Nico Karaoke could not start: {error}"));
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]

@@ -9,6 +9,11 @@ edition = "2024"
 license = "MIT"
 rust-version = "1.85"
 
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
@@ -30,5 +35,5 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 unicode-normalization = "0.1"
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Win32_System_WinRT"] }
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Win32_System_WinRT", "Win32_UI_WindowsAndMessaging"] }
 zbus = { version = "5", features = ["tokio"] }

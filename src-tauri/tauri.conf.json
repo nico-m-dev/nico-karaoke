@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nico Karaoke",
-  "version": "0.1.0",
   "identifier": "dev.nico.nicokaraoke",
   "build": {
     "frontendDist": "http://127.0.0.1:8770/"
   },
   "app": {
+    "enableGTKAppId": true,
     "windows": [],
     "security": {
       "csp": null

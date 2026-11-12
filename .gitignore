@@ -28,6 +28,10 @@ node_modules/
 *.rpm
 *.exe
 *.msi
+*.dmg
+*.pkg
+*.pdb
+*.dSYM
 
 # Tauri
 /src-tauri/target/

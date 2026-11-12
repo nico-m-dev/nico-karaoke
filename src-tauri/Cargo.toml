@@ -11,8 +11,15 @@ anyhow.workspace = true
 nico-karaoke-core = { path = "../crates/core" }
 nico-karaoke-server = { path = "../crates/server" }
 tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
 tracing.workspace = true
 tracing-appender.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
