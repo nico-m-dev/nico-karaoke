@@ -436,9 +436,9 @@ body[data-state="playing"] .idle {
   z-index: 20;
   display: flex;
   justify-content: flex-end;
+  overflow: hidden;
   padding: 1rem;
-  background: rgba(3, 5, 4, 0.62);
-  backdrop-filter: blur(8px);
+  background: rgba(3, 5, 4, 0.72);
 }
 
 .library-card {
@@ -449,16 +449,14 @@ body[data-state="playing"] .idle {
   border: 1px solid var(--panel-border);
   border-radius: 1.1rem;
   background: var(--panel);
-  animation: card-in 180ms ease-out;
+  animation: card-in 120ms ease-out;
 }
 
 @keyframes card-in {
   from {
-    transform: translateX(1rem);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
     opacity: 1;
   }
 }

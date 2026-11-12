@@ -131,6 +131,7 @@ const els = {
   libraryDetail: query<HTMLElement>("#library-detail"),
   libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
   libraryClose: query<HTMLButtonElement>("#library-close"),
+  libraryCard: query<HTMLElement>(".library-card"),
   offline: query<HTMLElement>("#offline"),
   toast: query<HTMLElement>("#toast"),
 };
@@ -661,6 +662,7 @@ async function openLibrary(): Promise<void> {
   els.library.hidden = false;
   els.stage.inert = true;
   showLibraryList();
+  els.libraryCard.scrollTop = 0;
   els.libraryClose.focus();
   await loadLibrary();
 }
