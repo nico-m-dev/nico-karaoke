@@ -73,6 +73,11 @@ Remaining manual checks: a real screen-reader pass on the player, library, and t
 a keyboard-only pass on the timeline. Timeline markers are pointer targets; the line list
 provides the keyboard path for selecting, seeking, nudging, and retiming.
 
+If the terminal shows `Couldn't connect to accessibility bus` or `Can't connect to a11y bus`,
+the session AT-SPI bus is stale: the socket exists but has no live listener. Restart it with
+`systemctl --user restart at-spi-dbus-bus.service` and relaunch the app. Do not set
+`NO_AT_BRIDGE=1` as a default workaround, because that turns the accessibility bridge off.
+
 ## Performance
 
 Measured with headless Chromium (software rendering) against a local server and a fake
