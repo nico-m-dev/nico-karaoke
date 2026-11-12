@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -17,6 +18,8 @@ const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct LinuxMediaProvider {
     connection: zbus::Connection,
+    /// Identity rarely changes, so it is fetched once per player instead of on every poll.
+    identities: Mutex<HashMap<String, String>>,
 }
 
 impl LinuxMediaProvider {
@@ -27,7 +30,38 @@ impl LinuxMediaProvider {
             .build()
             .await
             .map_err(|error| MediaError::Unavailable(error.to_string()))?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            identities: Mutex::new(HashMap::new()),
+        })
+    }
+
+    async fn identity(&self, name: &str) -> String {
+        if let Some(cached) = self
+            .identities
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(name)
+            .cloned()
+        {
+            return cached;
+        }
+
+        let identity: Option<String> =
+            match Proxy::new(&self.connection, name, OBJECT_PATH, ROOT_IFACE).await {
+                Ok(proxy) => proxy.get_property("Identity").await.ok(),
+                Err(_) => None,
+            };
+        // Cache only a real identity. A transient failure keeps the fallback visible but lets
+        // the next poll try again.
+        if let Some(identity) = identity.filter(|value| !value.trim().is_empty()) {
+            self.identities
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(name.to_owned(), identity.clone());
+            return identity;
+        }
+        fallback_label(name)
     }
 
     async fn player_names(&self) -> Result<Vec<String>, MediaError> {
@@ -67,14 +101,7 @@ impl LinuxMediaProvider {
         let can_seek: bool = player.get_property("CanSeek").await.unwrap_or(false);
         let can_play: bool = player.get_property("CanPlay").await.unwrap_or(false);
 
-        let identity: Option<String> =
-            match Proxy::new(&self.connection, name, OBJECT_PATH, ROOT_IFACE).await {
-                Ok(proxy) => proxy.get_property("Identity").await.ok(),
-                Err(_) => None,
-            };
-        let label = identity
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| fallback_label(name));
+        let label = self.identity(name).await;
 
         Ok(PlayerSnapshot {
             player: name.to_owned(),

@@ -71,6 +71,8 @@ pub struct LyricsDto {
     pub duration: Option<f64>,
     pub text: String,
     pub lines: Vec<LyricLine>,
+    pub metadata: Vec<String>,
+    pub extras: Vec<String>,
     pub lrclib_id: Option<i64>,
     pub fetched_at: f64,
     pub updated_at: f64,
@@ -123,6 +125,8 @@ impl LyricsDto {
             duration: record.duration,
             text: record.text,
             lines: record.lines,
+            metadata: record.metadata,
+            extras: record.extras,
             lrclib_id: record.lrclib_id,
             fetched_at: record.fetched_at,
             updated_at: record.updated_at,
@@ -145,6 +149,8 @@ impl LyricsDto {
             duration: None,
             text: String::new(),
             lines: Vec::new(),
+            metadata: Vec::new(),
+            extras: Vec::new(),
             lrclib_id: None,
             fetched_at: 0.0,
             updated_at: 0.0,
@@ -233,6 +239,8 @@ pub struct LibraryItemResponse {
 pub struct ParsedLyricsDto {
     pub synced: bool,
     pub lines: Vec<LyricLine>,
+    pub metadata: Vec<String>,
+    pub extras: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

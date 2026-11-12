@@ -9,9 +9,9 @@ use axum::http::{HeaderValue, Method, Request, StatusCode, header};
 use http_body_util::BodyExt;
 use nico_karaoke_core::{
     AppConfig, FakeMediaProvider, LaunchMode, Library, LrclibTrack, LyricRecord, LyricsClient,
-    LyricsError, LyricsLookup, PlayerSnapshot, record_key,
+    LyricsError, LyricsLookup, LyricsSource, PlayerSnapshot, record_key,
 };
-use nico_karaoke_server::watcher::{LyricsView, Watcher};
+use nico_karaoke_server::watcher::{LyricsView, NewLibraryItem, Watcher};
 use nico_karaoke_server::{AppState, app};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -158,6 +158,84 @@ fn snapshot(player: &str, title: &str, artist: &str) -> PlayerSnapshot {
     snapshot.length = Some(180.0);
     snapshot.position = Some(12.0);
     snapshot
+}
+
+struct BlockingLyrics {
+    started: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+#[async_trait]
+impl LyricsClient for BlockingLyrics {
+    async fn get(
+        &self,
+        _query: &nico_karaoke_core::LookupQuery,
+    ) -> Result<Vec<LrclibTrack>, LyricsError> {
+        self.started.notify_one();
+        self.release.notified().await;
+        Ok(vec![lrclib_track(
+            7,
+            "Song",
+            "Artist",
+            "[00:01.00]Fetched\n",
+        )])
+    }
+
+    async fn search(
+        &self,
+        _query: &nico_karaoke_core::LookupQuery,
+    ) -> Result<Vec<LrclibTrack>, LyricsError> {
+        Ok(Vec::new())
+    }
+}
+
+#[tokio::test]
+async fn deleting_a_record_during_a_lookup_does_not_resurrect_it() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let client = Arc::new(BlockingLyrics {
+        started: tokio::sync::Notify::new(),
+        release: tokio::sync::Notify::new(),
+    });
+    let lookup = Arc::new(LyricsLookup::new(client.clone()));
+    let provider = Arc::new(FakeMediaProvider::new(vec![snapshot(
+        "player", "Song", "Artist",
+    )]));
+    let watcher = Arc::new(Watcher::new(provider, lookup, library));
+
+    watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), client.started.notified())
+        .await
+        .expect("lookup starts");
+
+    let key = record_key("Song", "Artist");
+    watcher
+        .create_library_item(NewLibraryItem {
+            title: "Song".to_owned(),
+            artist: "Artist".to_owned(),
+            album: String::new(),
+            text: "[00:01.00]Manual\n".to_owned(),
+            source: LyricsSource::Manual,
+            duration: Some(180.0),
+            original_text: None,
+        })
+        .await
+        .expect("manual record saves");
+    assert!(
+        watcher
+            .delete_library_item(&key)
+            .await
+            .expect("record deletes")
+    );
+
+    client.release.notify_one();
+    tokio::time::sleep(Duration::from_millis(150)).await;
+
+    assert!(
+        watcher.library_item(&key).is_none(),
+        "a deleted record must not be recreated by an older lookup"
+    );
+    assert!(matches!(watcher.state().lyrics, LyricsView::Missing { .. }));
 }
 
 fn lrclib_track(id: i64, title: &str, artist: &str, synced: &str) -> LrclibTrack {

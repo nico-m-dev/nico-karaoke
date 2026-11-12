@@ -67,13 +67,27 @@ impl SmtcMediaProvider {
         Ok(manager)
     }
 
+    fn clear_manager(&self) {
+        *self
+            .manager
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
     async fn find_session(
         &self,
         player: &str,
     ) -> Result<GlobalSystemMediaTransportControlsSession, MediaError> {
         let manager = self.manager().await?;
         ensure_winrt();
-        for session in sessions_of(&manager)? {
+        let sessions = match sessions_of(&manager) {
+            Ok(sessions) => sessions,
+            Err(error) => {
+                self.clear_manager();
+                return Err(error);
+            }
+        };
+        for session in sessions {
             let candidate = session
                 .SourceAppUserModelId()
                 .map(|id| id.to_string())
@@ -91,7 +105,13 @@ impl MediaProvider for SmtcMediaProvider {
     async fn snapshots(&self) -> Result<Vec<PlayerSnapshot>, MediaError> {
         let manager = self.manager().await?;
         ensure_winrt();
-        let list = sessions_of(&manager)?;
+        let list = match sessions_of(&manager) {
+            Ok(list) => list,
+            Err(error) => {
+                self.clear_manager();
+                return Err(error);
+            }
+        };
 
         let mut snapshots = Vec::new();
         for session in list {

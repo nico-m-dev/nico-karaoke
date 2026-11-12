@@ -33,11 +33,40 @@ impl PreparedServer {
     }
 }
 
-/// Frontend directory from the environment, or the repository-relative browser build.
+/// Frontend directory from the environment, a packaged resource, the executable's
+/// neighbourhood, or the repository-relative browser build.
 pub fn web_dir() -> PathBuf {
-    std::env::var_os(WEB_DIR_ENV)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("web/dist"))
+    web_dir_with(None)
+}
+
+/// Resolve the frontend directory. `resource` lets the desktop shell pass Tauri's resource
+/// directory without the server crate depending on Tauri.
+pub fn web_dir_with(resource: Option<PathBuf>) -> PathBuf {
+    if let Some(value) = std::env::var_os(WEB_DIR_ENV) {
+        return PathBuf::from(value);
+    }
+
+    let mut candidates = Vec::new();
+    if let Some(resource) = resource {
+        candidates.push(resource);
+    }
+    candidates.push(PathBuf::from("web/dist"));
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(directory) = exe.parent() {
+            // A package can keep the assets next to the binary, under /usr/share, or under
+            // /usr/lib; all three are checked so the same binary works from any working
+            // directory.
+            candidates.push(directory.join("web"));
+            candidates.push(directory.join("../share/nico-karaoke/web"));
+            candidates.push(directory.join("../lib/nico-karaoke/web"));
+        }
+    }
+
+    first_ready(candidates).unwrap_or_else(|| PathBuf::from("web/dist"))
+}
+
+fn first_ready(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    candidates.into_iter().find(|path| web_dir_is_ready(path))
 }
 
 pub fn web_dir_is_ready(web_dir: &Path) -> bool {
@@ -101,4 +130,24 @@ async fn bind_listener(host: IpAddr, port: u16) -> Result<(TcpListener, u16)> {
         "no free port in the range {port}..{}",
         port.saturating_add(PORT_ATTEMPTS)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_the_first_ready_frontend_directory() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let empty = temp.path().join("empty");
+        let web = temp.path().join("web");
+        std::fs::create_dir(&empty).expect("empty directory");
+        std::fs::create_dir(&web).expect("web directory");
+        std::fs::write(web.join("index.html"), "index").expect("index");
+        std::fs::write(web.join("editor.html"), "editor").expect("editor");
+
+        assert_eq!(first_ready(vec![empty, web.clone()]), Some(web.clone()));
+        assert_eq!(first_ready(vec![web.clone()]), Some(web));
+        assert_eq!(first_ready(Vec::<PathBuf>::new()), None);
+    }
 }

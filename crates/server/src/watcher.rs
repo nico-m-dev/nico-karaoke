@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -13,6 +14,7 @@ use tokio::time::sleep;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(350);
 const FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
+const MEDIA_LOG_COOLDOWN: Duration = Duration::from_secs(30);
 const PENDING_RETRIES: usize = 20;
 const PENDING_DELAY: Duration = Duration::from_millis(250);
 
@@ -97,6 +99,10 @@ pub struct Watcher {
     cooldown: Mutex<Option<Cooldown>>,
     ensure_lock: Mutex<()>,
     match_cache: Mutex<Option<MatchCache>>,
+    media_error_at: Mutex<Option<Instant>>,
+    /// Deleted keys with the revision at which they disappeared. An in-flight lookup that
+    /// started before that revision must not resurrect the record.
+    deleted: Mutex<HashMap<String, u64>>,
     revision: AtomicU64,
 }
 
@@ -119,6 +125,8 @@ impl Watcher {
             cooldown: Mutex::new(None),
             ensure_lock: Mutex::new(()),
             match_cache: Mutex::new(None),
+            media_error_at: Mutex::new(None),
+            deleted: Mutex::new(HashMap::new()),
             revision: AtomicU64::new(0),
         }
     }
@@ -136,25 +144,54 @@ impl Watcher {
     }
 
     pub async fn tick(self: &Arc<Self>) {
-        let result = {
-            let mut media = self.media.lock().await;
-            media.poll(self.provider.as_ref()).await
-        };
-
-        match result {
-            Ok(update) => {
-                self.state
-                    .write()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .media = update.state;
-            }
+        // Sample outside the tracker lock. A slow or stuck player must not block play/pause or
+        // player selection, which need the same lock.
+        let snapshots = match self.provider.snapshots().await {
+            Ok(snapshots) => snapshots,
             Err(error) => {
-                tracing::warn!(error = %error, "media poll failed");
+                self.note_media_error(error);
                 return;
             }
+        };
+        *self
+            .media_error_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+
+        // Apply the sample and write the visible state in one critical section, so a concurrent
+        // choose_player() cannot be rolled back by an older sample.
+        {
+            let mut media = self.media.lock().await;
+            let update = media.update(snapshots);
+            self.state
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .media = update.state;
         }
 
         self.ensure_lyrics();
+    }
+
+    fn note_media_error(&self, error: MediaError) {
+        let now = Instant::now();
+        let should_log = {
+            let mut last = self
+                .media_error_at
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            match *last {
+                Some(at) if now.duration_since(at) < MEDIA_LOG_COOLDOWN => false,
+                _ => {
+                    *last = Some(now);
+                    true
+                }
+            }
+        };
+        if should_log {
+            tracing::warn!(error = %error, "media poll failed");
+        } else {
+            tracing::debug!(error = %error, "media poll still failing");
+        }
     }
 
     pub fn state(&self) -> WatcherState {
@@ -229,17 +266,18 @@ impl Watcher {
     }
 
     pub async fn choose_player(self: &Arc<Self>, player: &str) -> bool {
-        let mut media = self.media.lock().await;
-        if !media.choose(player) {
-            return false;
+        {
+            let mut media = self.media.lock().await;
+            if !media.choose(player) {
+                return false;
+            }
+            let state = media.state();
+            self.state
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .media = state;
         }
-        let state = media.state();
-        drop(media);
 
-        self.state
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .media = state;
         self.bump_revision();
         self.ensure_lyrics();
         true
@@ -306,6 +344,7 @@ impl Watcher {
         record.updated_at = 0.0;
         set_original(&mut record, source, &text, original_text);
 
+        self.forget_deleted(&key);
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();
 
@@ -334,6 +373,7 @@ impl Watcher {
         record.updated_at = 0.0;
         set_original(&mut record, source, &text, original_text);
 
+        self.forget_deleted(key);
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();
         if self.is_current_key(key) {
@@ -378,6 +418,7 @@ impl Watcher {
         record.updated_at = 0.0;
         set_original(&mut record, source, &text, original_text);
 
+        self.forget_deleted(&key);
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();
         if self.is_current_key(&key) {
@@ -396,6 +437,10 @@ impl Watcher {
 
         if removed {
             self.bump_revision();
+            self.deleted
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(key.to_owned(), self.revision.load(Ordering::SeqCst));
             if self.is_current_key(key) {
                 let generation = self.state().media.generation;
                 self.set_lyrics(
@@ -496,6 +541,7 @@ impl Watcher {
             }
         }
         record.updated_at = 0.0;
+        self.forget_deleted(&record.key);
         let saved = save_record(self.library.clone(), record).await?;
         self.bump_revision();
         if self.is_current_key(&saved.key) {
@@ -543,7 +589,10 @@ impl Watcher {
             match &state.lyrics {
                 LyricsView::Found(record) if record.key == key => return,
                 LyricsView::Loading { key: loading }
-                    if *loading == key && in_flight == Some((generation, revision)) =>
+                    if *loading == key
+                        && in_flight.is_some_and(|(in_flight_generation, _)| {
+                            in_flight_generation == generation
+                        }) =>
                 {
                     return;
                 }
@@ -589,7 +638,7 @@ impl Watcher {
 
             let mut attempts = 0;
             let result = loop {
-                if !watcher.is_current(generation, revision) {
+                if !watcher.is_generation(generation) {
                     watcher.clear_in_flight(generation, revision);
                     return;
                 }
@@ -602,7 +651,7 @@ impl Watcher {
                 }
             };
 
-            if !watcher.is_current(generation, revision) {
+            if !watcher.is_generation(generation) {
                 watcher.clear_in_flight(generation, revision);
                 return;
             }
@@ -610,20 +659,36 @@ impl Watcher {
             match result {
                 Ok(LookupOutcome::Found(record)) => {
                     let record = *record;
-                    let to_save = record.clone();
-                    let saved = tokio::task::spawn_blocking(move || library.put(to_save)).await;
-                    let final_record = match saved {
-                        Ok(Ok(saved)) => saved,
-                        Ok(Err(error)) => {
-                            tracing::warn!(error = %error, "could not save fetched lyrics");
-                            record
+                    // A delete after this lookup started must not be undone by fetched lyrics.
+                    if watcher.deleted_after(&key, revision) {
+                        watcher.clear_in_flight(generation, revision);
+                        return;
+                    }
+                    // A save while the lookup was running wins over the fetched text. This is
+                    // scoped to this track's key, so saving an unrelated song no longer throws
+                    // the lookup away.
+                    if let Some(existing) = library.get(&key) {
+                        watcher.set_lyrics(generation, LyricsView::Found(Box::new(existing)));
+                    } else {
+                        if watcher.deleted_after(&key, revision) {
+                            watcher.clear_in_flight(generation, revision);
+                            return;
                         }
-                        Err(error) => {
-                            tracing::warn!(error = %error, "library save task failed");
-                            record
-                        }
-                    };
-                    watcher.set_lyrics(generation, LyricsView::Found(Box::new(final_record)));
+                        let to_save = record.clone();
+                        let saved = tokio::task::spawn_blocking(move || library.put(to_save)).await;
+                        let final_record = match saved {
+                            Ok(Ok(saved)) => saved,
+                            Ok(Err(error)) => {
+                                tracing::warn!(error = %error, "could not save fetched lyrics");
+                                record
+                            }
+                            Err(error) => {
+                                tracing::warn!(error = %error, "library save task failed");
+                                record
+                            }
+                        };
+                        watcher.set_lyrics(generation, LyricsView::Found(Box::new(final_record)));
+                    }
                 }
                 Ok(LookupOutcome::Missing { fetched_at }) => {
                     watcher.set_lyrics(
@@ -667,10 +732,6 @@ impl Watcher {
             == generation
     }
 
-    fn is_current(&self, generation: u64, revision: u64) -> bool {
-        self.is_generation(generation) && self.revision.load(Ordering::SeqCst) == revision
-    }
-
     fn set_lyrics(&self, generation: u64, lyrics: LyricsView) {
         let mut state = self
             .state
@@ -703,6 +764,21 @@ impl Watcher {
 
     fn bump_revision(&self) {
         self.revision.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn forget_deleted(&self, key: &str) {
+        self.deleted
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(key);
+    }
+
+    fn deleted_after(&self, key: &str, revision: u64) -> bool {
+        self.deleted
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(key)
+            .is_some_and(|deleted| *deleted > revision)
     }
 }
 

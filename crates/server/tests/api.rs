@@ -56,6 +56,7 @@ async fn health_returns_ok_json() {
         .oneshot(
             Request::builder()
                 .uri("/api/health")
+                .header("host", "127.0.0.1")
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -79,12 +80,41 @@ async fn health_returns_ok_json() {
 }
 
 #[tokio::test]
+async fn missing_or_empty_host_is_rejected() {
+    let (state, _temp) = test_state();
+
+    let missing = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(missing.status(), StatusCode::FORBIDDEN);
+
+    let empty = app(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .header("host", "")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(empty.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn unknown_api_route_returns_json_404() {
     let (state, _temp) = test_state();
     let response = app(state)
         .oneshot(
             Request::builder()
                 .uri("/api/does-not-exist")
+                .header("host", "127.0.0.1")
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -110,6 +140,7 @@ async fn bare_api_route_returns_json_404() {
         .oneshot(
             Request::builder()
                 .uri("/api")
+                .header("host", "127.0.0.1")
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -137,6 +168,7 @@ async fn missing_static_file_returns_404() {
         .oneshot(
             Request::builder()
                 .uri("/missing.js")
+                .header("host", "127.0.0.1")
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -161,6 +193,7 @@ async fn security_headers_are_set_on_api_and_rejections() {
             .oneshot(
                 Request::builder()
                     .uri(uri)
+                    .header("host", "127.0.0.1")
                     .body(Body::empty())
                     .expect("request should build"),
             )
@@ -280,6 +313,7 @@ async fn static_serving_blocks_path_traversal() {
             .oneshot(
                 Request::builder()
                     .uri(uri)
+                    .header("host", "127.0.0.1")
                     .body(Body::empty())
                     .expect("request should build"),
             )
@@ -372,7 +406,7 @@ async fn parse_lyrics_returns_lines_without_writing() {
                 .header("host", "127.0.0.1")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    r#"{"text":"[00:01.00]First [end:00:04.00]\n[00:06.00]Second\n"}"#,
+                    r#"{"text":"[ar:Artist]\nIntro\n[00:01.00]First [end:00:04.00]\n[00:06.00]Second\n"}"#,
                 ))
                 .expect("request should build"),
         )
@@ -392,6 +426,8 @@ async fn parse_lyrics_returns_lines_without_writing() {
     assert_eq!(payload["lines"][0]["t"], 1.0);
     assert_eq!(payload["lines"][0]["end"], 4.0);
     assert_eq!(payload["lines"][1]["text"], "Second");
+    assert_eq!(payload["metadata"][0], "[ar:Artist]");
+    assert_eq!(payload["extras"][0], "Intro");
 }
 
 #[tokio::test]

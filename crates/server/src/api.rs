@@ -20,7 +20,8 @@ use crate::dto::{
 };
 use crate::watcher::{NewLibraryItem, WatcherError};
 
-pub const MAX_BODY: usize = 256_000;
+/// Enough for a maximum working text plus a maximum preserved original.
+pub const MAX_BODY: usize = 512_000;
 const MAX_LYRICS: usize = 120_000;
 const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
@@ -298,6 +299,8 @@ pub async fn parse_lyrics(
     Ok(Json(ParsedLyricsDto {
         synced: document.synced,
         lines: document.lines,
+        metadata: document.metadata,
+        extras: document.extras,
     }))
 }
 
@@ -521,14 +524,17 @@ where
 }
 
 fn is_local_request(config: &AppConfig, headers: &HeaderMap) -> bool {
-    if let Some(host) = headers
+    // Fail closed: the Host header is the DNS-rebinding guard, so a missing or empty header
+    // is treated as a foreign request instead of skipping validation.
+    let Some(host) = headers
         .get(header::HOST)
         .and_then(|value| value.to_str().ok())
-    {
-        let name = host_name(host);
-        if !name.is_empty() && !allowed_host(config, &name) {
-            return false;
-        }
+    else {
+        return false;
+    };
+    let name = host_name(host);
+    if name.is_empty() || !allowed_host(config, &name) {
+        return false;
     }
 
     if let Some(origin) = headers
@@ -612,12 +618,13 @@ fn watcher_error(error: WatcherError) -> ApiError {
         WatcherError::InvalidValue => api_error(StatusCode::BAD_REQUEST, "invalid_value"),
         WatcherError::Library(error) => {
             tracing::warn!(error = %error, "library operation failed");
-            let code = match error {
-                LibraryError::EmptyText => "lyrics_empty",
-                LibraryError::MissingKey | LibraryError::InvalidKey => "invalid_key",
-                _ => "library_error",
-            };
-            api_error(StatusCode::INTERNAL_SERVER_ERROR, code)
+            match error {
+                LibraryError::EmptyText => api_error(StatusCode::BAD_REQUEST, "lyrics_empty"),
+                LibraryError::MissingKey | LibraryError::InvalidKey => {
+                    api_error(StatusCode::BAD_REQUEST, "invalid_key")
+                }
+                _ => api_error(StatusCode::INTERNAL_SERVER_ERROR, "library_error"),
+            }
         }
         WatcherError::Task(error) => {
             tracing::error!(error = %error, "library task failed");
