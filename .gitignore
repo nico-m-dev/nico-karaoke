@@ -20,6 +20,9 @@ node_modules/
 .env.*
 **/coverage/
 
+# Local working notes
+docs/TASKS.md
+
 # Packaged artifacts
 /build/
 /release/

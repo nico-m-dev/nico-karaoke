@@ -120,10 +120,10 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 ## Workflow
 
 - For a new feature, multi-file refactor, data migration, release, or anything that goes
-  live, keep a temporary checklist in `docs/TASKS.md`, organised by the current workstream
-  (acceptance, verification, packaging, or an active follow-up).
-- `docs/roadmap.md` owns product scope and future ideas. `docs/TASKS.md` owns the current
-  execution plan. Move items between them deliberately.
+  live, keep a temporary checklist in `docs/TASKS.md` (local and gitignored), organised by
+  the current workstream (acceptance, verification, packaging, or an active follow-up).
+- `docs/roadmap.md` owns product scope and future ideas. The local `docs/TASKS.md` owns the
+  current execution plan; it is not committed. Move items between them deliberately.
 - Before saying something works, run it. Static checks alone are not evidence of runtime
   behaviour.
 - Have a reviewer or subagent read the diff and run the tests before calling large work done.
@@ -138,5 +138,5 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - Tests and linters pass.
 - English source text and Dutch translation are both complete.
 - No absolute paths, no secrets, no local data in the repository.
-- Relevant docs are updated, including `docs/roadmap.md`, `docs/TASKS.md`, or
-  `docs/testing.md` when scope or evidence changed.
+- Relevant docs are updated, including `docs/roadmap.md` or `docs/testing.md` when scope or
+  evidence changed.

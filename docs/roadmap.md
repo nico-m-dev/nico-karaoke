@@ -3,10 +3,9 @@
 Status: the rewrite is delivered; release readiness and product follow-ups remain.
 Updated: 2026-11-12.
 
-This file owns product direction and future work. The current execution checklist lives in
-`docs/TASKS.md`; verified behaviour and manual evidence live in `docs/testing.md`. When an item
-is delivered, remove it here or mark the lasting decision; do not keep a history of finished
-phases.
+This file owns product direction and future work. Verified behaviour and manual evidence live
+in `docs/testing.md`. When an item is delivered, remove it here or mark the lasting decision;
+do not keep a history of finished phases.
 
 ## What makes this karaoke app
 
