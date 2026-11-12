@@ -89,14 +89,12 @@ If more than one player is active, choose the one to follow in the top bar.
 Everything stays local:
 
 - Linux: `~/.local/share/nico-karaoke/`
-- Windows: `%LOCALAPPDATA%\nico\nico-karaoke\data\`
+- Windows: the app's local data folder under `%LOCALAPPDATA%` (look for the `nico-karaoke`
+  folder)
 
 The `library/` folder contains one `.lrc` and one `.json` file per saved song. The same folder
 holds `nico-karaoke.log` and its backups. Lyrics are requested from LRCLIB when needed; nothing
 is uploaded and there is no account, telemetry, analytics, or remote logging.
-
-On Windows, `%LOCALAPPDATA%` already resolves to your user profile; the `nico` in the middle is
-the app's organization folder, not your username.
 
 Set `NICO_KARAOKE_DATA` to use a different data directory (development and portable use).
 
@@ -359,7 +357,7 @@ crates/server/     local Axum server, runtime, and static assets
 src-tauri/         Tauri 2 desktop shell
 web/               Vite + strict TypeScript UI
 scripts/           local developer helpers
-docs/              roadmap, current tasks, and testing evidence
+docs/              roadmap and testing evidence
 ```
 
 ## Licence

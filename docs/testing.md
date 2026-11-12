@@ -148,6 +148,12 @@ double-click counts once, that a simulated `can_play`/metadata/key drop on the s
 longer swallows the click, and that a marker seek moves the playhead forward without a backward
 step. A full release acceptance pass on the Studio remains.
 
+## README screenshots
+
+The screenshots in `docs/screenshots/` were captured against an isolated demo data directory.
+The song titles, artist names, and lyrics are fictional and written for the captures; no
+personal data or third-party artwork is shown.
+
 ## Manual player matrix
 
 | Area | Linux | Windows |
