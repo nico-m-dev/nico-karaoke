@@ -197,9 +197,6 @@ textarea:focus-visible {
   align-items: center;
   gap: 0.75rem;
   padding: 1rem clamp(1rem, 3vw, 2.2rem);
-  transition:
-    opacity 380ms ease,
-    transform 380ms ease;
 }
 
 .bar.top {
@@ -211,26 +208,6 @@ textarea:focus-visible {
   bottom: 0;
   justify-content: center;
   background: linear-gradient(to top, rgba(8, 11, 10, 0.86), transparent);
-}
-
-.stage.chrome-hidden .bar.top {
-  transform: translateY(-0.6rem);
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transition:
-    opacity 380ms ease,
-    transform 380ms ease,
-    visibility 0s linear 380ms;
-}
-
-/* The transport stays visible. Hiding it made the first click on Play unreliable: the bar
-   faded while the pointer was already over the button, so the click landed on a non-clickable
-   element and only the next click worked. */
-.stage.chrome-hidden .bar.bottom {
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
 }
 
 .dot {

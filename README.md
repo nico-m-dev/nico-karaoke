@@ -146,8 +146,8 @@ past lines fade; unsynchronised lyrics fall back to a readable scrollable list.
 | `Library` | open the searchable library browser |
 | `NL` / `EN` | switch language from the idle screen |
 
-The top bar fades after a few seconds while playing; move the mouse or press a key to bring it
-back. The transport bar stays visible so play/pause is always clickable.
+The top bar and the transport bar stay visible while playing, so the controls are always
+reachable and nothing fades in or out.
 
 ## Library
 

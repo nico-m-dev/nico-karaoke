@@ -171,7 +171,7 @@ let plainMode = false;
 let offsetSeconds = 0;
 let lyricsKey = "";
 let idleTimer = 0;
-let chromeTimer = 0;
+
 let toastTimer = 0;
 let lastTimeText = "";
 let tickScheduled = false;
@@ -552,7 +552,6 @@ function applyNow(next: Now): void {
   if (document.body.dataset.state !== "playing") {
     document.body.dataset.state = "playing";
     els.controls.hidden = false;
-    showChrome();
   }
 
   const sameTrack =
@@ -614,14 +613,13 @@ function setOffline(value: boolean): void {
 
 function goIdle(next: Now): void {
   clearTimeout(idleTimer);
-  clearTimeout(chromeTimer);
   idleTimer = 0;
   anchor = null;
   plainMode = false;
   lyricsKey = "";
   lines = [];
   lineEls = [];
-  els.stage.classList.remove("plain", "chrome-hidden");
+  els.stage.classList.remove("plain");
   document.body.dataset.state = "idle";
   document.body.dataset.playing = "false";
   els.controls.hidden = true;
@@ -634,25 +632,6 @@ function goIdle(next: Now): void {
 
 function renderPlayers(players: PlayerInfo[], track: Track | null): void {
   updatePlayers(players, track);
-}
-
-function chromeHasFocus(): boolean {
-  return (
-    document.activeElement instanceof Element && document.activeElement.closest(".bar") !== null
-  );
-}
-
-function showChrome(): void {
-  els.stage.classList.remove("chrome-hidden");
-  clearTimeout(chromeTimer);
-  if (document.body.dataset.playing === "true" && els.library.hidden) {
-    chromeTimer = window.setTimeout(() => {
-      // Never hide the bar while one of its controls has keyboard focus.
-      if (!chromeHasFocus()) {
-        els.stage.classList.add("chrome-hidden");
-      }
-    }, 3000);
-  }
 }
 
 async function poll(): Promise<void> {
@@ -747,7 +726,6 @@ async function openLibrary(): Promise<void> {
   selectedKey = null;
   detailItem = null;
   els.librarySearch.value = "";
-  clearTimeout(chromeTimer);
   els.library.hidden = false;
   els.stage.inert = true;
   showLibraryList();
@@ -765,7 +743,6 @@ function closeLibrary(): void {
   els.stage.inert = false;
   selectedKey = null;
   detailItem = null;
-  showChrome();
   const opener = libraryOpener;
   libraryOpener = null;
   opener?.focus();
@@ -1167,11 +1144,7 @@ function bind(): void {
   window.addEventListener("resize", recenter);
   window.addEventListener("orientationchange", recenter);
   document.addEventListener("fullscreenchange", recenter);
-  window.addEventListener("mousemove", showChrome, { passive: true });
-  window.addEventListener("pointerdown", showChrome, { passive: true });
-  window.addEventListener("touchstart", showChrome, { passive: true });
   window.addEventListener("keydown", (event) => {
-    showChrome();
     if (event.key === "Escape") {
       closeLibrary();
       return;
@@ -1207,14 +1180,7 @@ function bind(): void {
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       void poll();
-      showChrome();
     }
-  });
-  document.addEventListener("focusin", () => {
-    showChrome();
-  });
-  document.addEventListener("focusout", () => {
-    showChrome();
   });
 }
 
