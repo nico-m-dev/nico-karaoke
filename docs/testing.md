@@ -127,14 +127,16 @@ controls intermittently unreachable.
 The Studio transport sends an explicit `play` or `pause` based on the intended state instead of
 a blind toggle, and shows that state immediately while a poll may still describe the previous
 one. It also queues a single click that arrives while a control request is in flight instead of
-swallowing it (a double-click still counts as one toggle), and bridges one failed `can_play`
-sample so the button does not briefly disable under the pointer. A seek guard holds the
-timeline playhead at the requested position until the player reports it, so a stale `getNow()`
-response no longer makes the playhead jump back and forth. The seek and transport state
-machines have unit tests in `web/src/studio/seek.test.ts` and
-`web/src/studio/transport.test.ts`. A headless Chromium run against a real `mpv` session
+swallowing it (a double-click still counts as one toggle). The control stays usable while the
+same player is followed, even when a poll briefly drops `can_play`, reports a changed track id,
+or returns another lyrics key; only a disappearing player or a real follow-target change
+disables it. A seek guard holds the timeline playhead at the requested position until the
+player reports it, so a stale `getNow()` response no longer makes the playhead jump back and
+forth. The seek and transport state machines have unit tests in `web/src/studio/seek.test.ts`
+and `web/src/studio/transport.test.ts`. A headless Chromium run against a real `mpv` session
 confirmed that one click flips the control immediately and the player follows, that a
-double-click counts once, and that a marker seek moves the playhead forward without a backward
+double-click counts once, that a simulated `can_play`/metadata/key drop on the same player no
+longer swallows the click, and that a marker seek moves the playhead forward without a backward
 step. A full owner acceptance pass on the Studio remains.
 
 ## Manual player matrix

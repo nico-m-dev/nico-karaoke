@@ -406,24 +406,15 @@ function updateNotice(): void {
   }
 }
 
-const TRANSPORT_GRACE_MS = 2000;
+const TRANSPORT_GRACE_MS = 5000;
 let transportReadyUntil = 0;
 let transportReadyDocument = "";
-let transportReadyTrack = "";
+let transportReadyPlayer = "";
 let transportIntent: TransportIntent | null = null;
 
 /** The opened document that the transport belongs to. */
 function documentIdentity(): string {
   return key ?? `unsaved:${boundTrackId ?? ""}|${boundSignature ?? ""}`;
-}
-
-function followedTrackIdentity(): string {
-  const track = now?.track;
-  if (!track) {
-    return "";
-  }
-  // Some players reuse one MPRIS track id for every track, so include the signature too.
-  return `${track.player}:${track.track_id}|${now?.lyrics.signature ?? ""}`;
 }
 
 /** Drop transport state that belongs to the document that was open before. */
@@ -433,7 +424,7 @@ function resetTransportState(): void {
   transportIntent = null;
   transportReadyUntil = 0;
   transportReadyDocument = "";
-  transportReadyTrack = "";
+  transportReadyPlayer = "";
 }
 
 /** The new play state shown immediately after a click, before a poll confirms it. */
@@ -464,25 +455,26 @@ function applyTransportIntent(playing: boolean): void {
 }
 
 /**
- * Whether the transport may control the followed player. One failed provider sample (a slow
- * D-Bus reply, for example) clears `can_play` for a single poll. Disabling the button inside
- * that window swallowed the click, so bridge a short gap instead. The grace never crosses a
- * different Studio document or a different track. A completely missing track disables the
- * control, because the server cannot reach a player it cannot see.
+ * Whether the transport may control the followed player. A weak machine or a busy media
+ * player can report a dropped `CanPlay`, a changed track id, or a different lyrics key for a
+ * poll or two. Disabling the button inside that window swallowed the click, so bridge the
+ * gap as long as the same player is still followed. The grace never crosses a different
+ * Studio document or a different player, and a completely missing track disables the control
+ * because the server cannot reach a player it cannot see.
  */
 function transportReady(): boolean {
   const nowMs = performance.now();
   const track = now?.track;
-  if (isCurrent() && track?.can_play) {
+  if (isCurrent() && track) {
     transportReadyUntil = nowMs + TRANSPORT_GRACE_MS;
     transportReadyDocument = documentIdentity();
-    transportReadyTrack = followedTrackIdentity();
+    transportReadyPlayer = track.player;
     return true;
   }
   if (nowMs >= transportReadyUntil || transportReadyDocument !== documentIdentity()) {
     return false;
   }
-  return Boolean(track) && followedTrackIdentity() === transportReadyTrack;
+  return Boolean(track) && track?.player === transportReadyPlayer;
 }
 
 function renderTransport(): void {
