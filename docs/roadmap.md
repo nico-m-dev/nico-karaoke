@@ -5,15 +5,10 @@ Future work and open decisions. Product behaviour, architecture, and settled dec
 
 Updated: 2026-11-13.
 
-## Release readiness
+## After 1.0.0
 
-- Release acceptance run in development, followed by finetuning.
-- Real Windows SMTC run with a media application before a Windows release.
-- Linux and Windows release builds in CI, with WebKitGTK/GTK development packages installed on
-  Linux runners.
-- Semantic version tags, a changelog, and GitHub Releases with downloadable binaries.
 - Linux bundle formats (`.deb`, AppImage, or both) and Windows code signing if distribution
-  grows beyond local use.
+  grows beyond portable archives.
 - Optional update notification against GitHub Releases; report only, never install silently.
 - macOS only when a real test machine is available.
 

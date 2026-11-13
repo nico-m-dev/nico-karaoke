@@ -203,6 +203,10 @@ were refreshed after the neutral surface and accent palette change.
   `README.md`, `LICENSE`, and `CHANGELOG.md`; the owner ran it on a real Windows machine with a
   media application and reported that the app works. The exact Windows build and player were not
   recorded.
+- `v1.0.0` was published on 2026-11-13. Both archives and `SHA256SUMS.txt` are attached.
+  An anonymous download from the public release URL returned the same Linux checksum
+  (`08a9359d…`), and the Windows archive checksum is `b0e2fb43…`. The published binaries come
+  from the same source as the accepted rc.2 build.
 
 ## Manual player matrix
 
