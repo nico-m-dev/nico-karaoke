@@ -192,12 +192,16 @@ were refreshed after the neutral surface and accent palette change.
 - Running `NicoKaraoke` from an empty directory with an empty data directory reported
   `version: 1.0.0` from `/api/health`, served the idle screen, and returned the embedded
   `idle-lime.webp` as `image/webp` with `X-Content-Type-Options: nosniff`.
-- The CI release builds, the release candidate archives, and the real Windows acceptance run
-  still need to be completed before publishing.
 - `v1.0.0-rc.1`: both CI builds passed, but the draft step looked for
   `docs/releases/v1.0.0-rc.1.md` instead of the package's `v1.0.0.md`. The downloaded Linux
   artifact was still verified: version 1.0.0, idle screen, embedded WebP with the right content
   type. The notes lookup was fixed and `rc.2` rebuilt.
+- `v1.0.0-rc.2`: the release workflow passed and created a draft release with both archives and
+  `SHA256SUMS.txt`; both checksums verified. The Linux archive from the draft was extracted and
+  started from an empty directory: version 1.0.0, `/api/health` version 1.0.0, and the embedded
+  `idle-lime.webp` served as `image/webp`. The Windows archive contains `NicoKaraoke.exe`,
+  `README.md`, `LICENSE`, and `CHANGELOG.md`; the real Windows acceptance run is the remaining
+  step.
 
 ## Manual player matrix
 
