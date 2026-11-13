@@ -12,6 +12,7 @@ nico-karaoke-core = { path = "../crates/core" }
 nico-karaoke-server = { path = "../crates/server" }
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
+tokio.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 

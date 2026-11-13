@@ -188,7 +188,7 @@ TypeScript `<6.1`. Revisit the pin when the lint toolchain supports TypeScript 7
 | Setting | Environment variable | Default |
 | --- | --- | --- |
 | Data directory | `NICO_KARAOKE_DATA` | platform local data directory |
-| Frontend build | `NICO_KARAOKE_WEB` | `web/dist` |
+| Frontend build | `NICO_KARAOKE_WEB` | `web/dist` (falls back to assets embedded in the binary) |
 | Log filter | `RUST_LOG` | server info, HTTP warnings |
 
 Command-line options:
@@ -356,10 +356,10 @@ through a package override.
 Linux for pushes to `main` and pull requests. Documentation-only changes are skipped.
 
 The **Build test artifacts** workflow can be started manually from the Actions tab. It produces
-an unsigned Linux `.tar.gz` and a Windows zip, each containing the desktop executable and the
-`web/` assets next to it. Extract the archive and run the executable from that folder. Keep the
-`web` folder next to the executable. The Windows build is a test build, not an installer;
-SmartScreen may warn because it is not code-signed yet.
+an unsigned Linux `.tar.gz` and a Windows zip, each containing a self-contained desktop
+executable (plus the README and licence). The frontend is embedded in the executable, so there
+is no separate `web` folder to keep next to it. The Windows build is a test build, not an
+installer; SmartScreen may warn because it is not code-signed yet.
 
 ### Repository layout
 

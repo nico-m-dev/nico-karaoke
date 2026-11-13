@@ -9,8 +9,6 @@ Updated: 2026-11-13.
 
 - Release acceptance run in development, followed by finetuning.
 - Real Windows SMTC run with a media application before a Windows release.
-- Packaged Tauri builds with the frontend embedded or shipped as a resource, so the app runs
-  from any working directory and without a repository checkout.
 - Linux and Windows release builds in CI, with WebKitGTK/GTK development packages installed on
   Linux runners.
 - Semantic version tags, a changelog, and GitHub Releases with downloadable binaries.

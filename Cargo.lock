@@ -2202,6 +2202,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "tokio",
  "tracing",
  "tracing-appender",
  "windows 0.62.2",

@@ -37,9 +37,8 @@ jobs:
       - run: cargo build --release --locked -p nico-karaoke-desktop
       - name: Stage artifact
         run: |
-          mkdir -p dist/NicoKaraoke-linux-x86_64/web
+          mkdir -p dist/NicoKaraoke-linux-x86_64
           cp target/release/nico-karaoke-desktop dist/NicoKaraoke-linux-x86_64/
-          cp -R web/dist/. dist/NicoKaraoke-linux-x86_64/web/
           cp README.md LICENSE NOTICE dist/NicoKaraoke-linux-x86_64/
           (cd dist && tar -czf NicoKaraoke-linux-x86_64.tar.gz NicoKaraoke-linux-x86_64)
       - uses: actions/upload-artifact@v7
@@ -67,9 +66,8 @@ jobs:
       - name: Stage artifact
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist/NicoKaraoke-windows-x86_64/web | Out-Null
+          New-Item -ItemType Directory -Force -Path dist/NicoKaraoke-windows-x86_64 | Out-Null
           Copy-Item target/release/nico-karaoke-desktop.exe dist/NicoKaraoke-windows-x86_64/
-          Copy-Item -Path web/dist/* -Destination dist/NicoKaraoke-windows-x86_64/web/ -Recurse -Force
           Copy-Item -Path README.md, LICENSE, NOTICE -Destination dist/NicoKaraoke-windows-x86_64/
       - uses: actions/upload-artifact@v7
         with:

@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     let _log_guard = init_tracing(&config.data_dir);
 
     let web_dir = runtime::web_dir();
-    if !runtime::web_dir_is_ready(&web_dir) {
+    if !runtime::web_dir_is_ready(&web_dir) && !nico_karaoke_server::has_embedded_assets() {
         tracing::warn!(
             "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB"
         );

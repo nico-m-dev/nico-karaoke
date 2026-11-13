@@ -55,6 +55,10 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
   record.
 - The UI polls state but interpolates playback position locally; do not add per-frame server
   requests. Animation loops stop while playback is paused.
+- The desktop executable embeds the built web assets; a packaged build must not require an
+  external `web` directory. Development still prefers `web/dist` when it exists.
+- Keep the server off the Tauri main thread. The Windows SMTC provider initializes COM as MTA;
+  WebView2 needs the main thread's apartment.
 - Centre the lyric track with native viewport scrolling, not a CSS transform. WebKitGTK at
   fractional display scaling visibly jitters transformed text; see `docs/roadmap.md`.
 

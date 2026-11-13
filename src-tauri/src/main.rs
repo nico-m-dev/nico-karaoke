@@ -101,6 +101,47 @@ fn local_view_url(raw: &str) -> anyhow::Result<tauri::Url> {
     Ok(url)
 }
 
+/// Start the server on its own thread and return its bound URL.
+///
+/// The Windows SMTC provider initializes COM as MTA. Doing that on the Tauri main thread makes
+/// WebView2 window creation fail afterwards. The Python predecessor also kept its server on a
+/// separate thread, which kept the UI thread's COM apartment clean.
+fn start_server(config: AppConfig, web_dir: std::path::PathBuf) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("nico-karaoke-server".to_owned())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    let _ = tx.send(Err(format!("could not create the server runtime: {error}")));
+                    return;
+                }
+            };
+            let prepared = match runtime.block_on(runtime::prepare(config, web_dir)) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let _ = tx.send(Err(format!("{error:#}")));
+                    return;
+                }
+            };
+            let url = prepared.url();
+            if tx.send(Ok(url)).is_err() {
+                return;
+            }
+            if let Err(error) = runtime.block_on(prepared.serve()) {
+                tracing::error!(error = %error, "local server stopped");
+            }
+        })
+        .map_err(|error| format!("could not start the server thread: {error}"))?;
+
+    rx.recv_timeout(std::time::Duration::from_secs(30))
+        .map_err(|_| "the local server did not start within 30 seconds".to_owned())?
+}
+
 fn main() {
     let config = match AppConfig::from_env() {
         Ok(config) => config,
@@ -149,10 +190,20 @@ fn main() {
             let guard = logging::init_tracing(&config.data_dir);
             app.manage(LogGuard(Mutex::new(guard)));
 
+            let default_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                tracing::error!("panic: {info}");
+                report_fatal(&format!("Nico Karaoke crashed: {info}"));
+                default_hook(info);
+            }));
+
             let web_dir =
                 runtime::web_dir_with(app.path().resource_dir().ok().map(|dir| dir.join("web")));
             // HMR serves the page from Vite, so a local build output is not required then.
-            if webview_override.is_none() && !runtime::web_dir_is_ready(&web_dir) {
+            if webview_override.is_none()
+                && !runtime::web_dir_is_ready(&web_dir)
+                && !nico_karaoke_server::has_embedded_assets()
+            {
                 let message =
                     "frontend build not found; run `npm run build` in web/ or set NICO_KARAOKE_WEB";
                 tracing::error!("{message}");
@@ -160,29 +211,20 @@ fn main() {
                 std::process::exit(2);
             }
 
-            let prepared =
-                match tauri::async_runtime::block_on(runtime::prepare(config.clone(), web_dir)) {
-                    Ok(prepared) => prepared,
-                    Err(error) => {
-                        tracing::error!(
-                            error = %format!("{error:#}"),
-                            "failed to start the local server"
-                        );
-                        report_fatal(&format!("failed to start the local server: {error:#}"));
-                        std::process::exit(2);
-                    }
-                };
-            let server_url = prepared.url();
+            let server_url = match start_server(config.clone(), web_dir) {
+                Ok(url) => url,
+                Err(error) => {
+                    let message = format!("failed to start the local server: {error}");
+                    tracing::error!("{message}");
+                    report_fatal(&message);
+                    std::process::exit(2);
+                }
+            };
             tracing::info!(
                 data = %config.data_dir.display(),
                 url = %server_url,
                 "starting desktop shell"
             );
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = prepared.serve().await {
-                    tracing::error!(error = %error, "local server stopped");
-                }
-            });
 
             let raw_url = webview_override.unwrap_or(server_url);
             let url = match local_view_url(&raw_url) {
