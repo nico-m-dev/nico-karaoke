@@ -194,6 +194,10 @@ were refreshed after the neutral surface and accent palette change.
   `idle-lime.webp` as `image/webp` with `X-Content-Type-Options: nosniff`.
 - The CI release builds, the release candidate archives, and the real Windows acceptance run
   still need to be completed before publishing.
+- `v1.0.0-rc.1`: both CI builds passed, but the draft step looked for
+  `docs/releases/v1.0.0-rc.1.md` instead of the package's `v1.0.0.md`. The downloaded Linux
+  artifact was still verified: version 1.0.0, idle screen, embedded WebP with the right content
+  type. The notes lookup was fixed and `rc.2` rebuilt.
 
 ## Manual player matrix
 

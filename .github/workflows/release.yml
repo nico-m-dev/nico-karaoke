@@ -152,9 +152,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
+          package_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           if [ ! -f "$notes" ]; then
-            notes="docs/releases/v${version}.md"
+            notes="docs/releases/v${package_version}.md"
           fi
           rendered="$(mktemp)"
           sed "s/{{VERSION}}/${version}/g" "$notes" > "$rendered"
