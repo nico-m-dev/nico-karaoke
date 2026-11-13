@@ -200,8 +200,9 @@ were refreshed after the neutral surface and accent palette change.
   `SHA256SUMS.txt`; both checksums verified. The Linux archive from the draft was extracted and
   started from an empty directory: version 1.0.0, `/api/health` version 1.0.0, and the embedded
   `idle-lime.webp` served as `image/webp`. The Windows archive contains `NicoKaraoke.exe`,
-  `README.md`, `LICENSE`, and `CHANGELOG.md`; the real Windows acceptance run is the remaining
-  step.
+  `README.md`, `LICENSE`, and `CHANGELOG.md`; the owner ran it on a real Windows machine with a
+  media application and reported that the app works. The exact Windows build and player were not
+  recorded.
 
 ## Manual player matrix
 
