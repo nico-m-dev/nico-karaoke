@@ -82,7 +82,7 @@ body.studio-body {
   padding: 0.5rem 0.7rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.8rem;
-  background: rgba(8, 11, 10, 0.4);
+  background: rgb(var(--bg-rgb) / 0.4);
 }
 
 .studio-transport .studio-actions {
@@ -113,7 +113,7 @@ body.studio-body {
 .studio-timeline {
   border: 1px solid var(--panel-border);
   border-radius: 0.9rem;
-  background: rgba(8, 11, 10, 0.35);
+  background: rgb(var(--bg-rgb) / 0.35);
 }
 
 .timeline-toolbar {
@@ -205,7 +205,7 @@ body.studio-body {
   top: 0;
   width: 0;
   height: 96px;
-  border-left: 1px solid rgba(143, 162, 152, 0.45);
+  border-left: 1px solid rgb(162 162 172 / 0.45);
   cursor: grab;
   touch-action: none;
 }
@@ -312,7 +312,7 @@ body.studio-body {
 .raw-panel {
   border: 1px solid var(--panel-border);
   border-radius: 0.9rem;
-  background: rgba(8, 11, 10, 0.35);
+  background: rgb(var(--bg-rgb) / 0.35);
 }
 
 .studio-section-head {
@@ -404,7 +404,7 @@ body.studio-body {
 .line-time:focus,
 .line-text:focus {
   border-color: var(--panel-border);
-  background: rgba(8, 11, 10, 0.6);
+  background: rgb(var(--bg-rgb) / 0.6);
   outline: none;
 }
 
@@ -546,7 +546,7 @@ body.studio-body {
   padding: 0.55rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.6rem;
-  background: rgba(8, 11, 10, 0.6);
+  background: rgb(var(--bg-rgb) / 0.6);
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.74rem;
@@ -571,7 +571,7 @@ body.studio-body {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(4, 6, 5, 0.78);
+  background: rgb(4 4 6 / 0.78);
   backdrop-filter: blur(4px);
 }
 
@@ -611,7 +611,7 @@ body.studio-body {
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
-  background: rgba(8, 11, 10, 0.6);
+  background: rgb(var(--bg-rgb) / 0.6);
   color: var(--text);
   font: inherit;
 }
