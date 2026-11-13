@@ -7,7 +7,6 @@ on:
       - "docs/**"
       - "**.md"
       - "LICENSE"
-      - "NOTICE"
       - ".gitignore"
   pull_request:
     branches: [main]
@@ -15,7 +14,6 @@ on:
       - "docs/**"
       - "**.md"
       - "LICENSE"
-      - "NOTICE"
       - ".gitignore"
   workflow_dispatch:
 

@@ -83,6 +83,29 @@ the session AT-SPI bus is stale: the socket exists but has no live listener. Res
 `systemctl --user restart at-spi-dbus-bus.service` and relaunch the app. Do not set
 `NO_AT_BRIDGE=1` as a default workaround, because that turns the accessibility bridge off.
 
+## Idle art and accent colours
+
+- Five accent palettes live as CSS variables on `<html data-accent>`, so the player, lyrics
+  highlight, controls, and Studio use one choice. The choice persists as `nico.accent`; lime
+  is the default.
+- Every accent colour meets AA (4.5:1) for normal text against the page background and the
+  accent-tinted panel surface used by primary buttons; the lowest is magenta at 5.0:1, and
+  cyan, lime, and orange exceed 6.9:1. Inactive lyric lines keep the existing large-text
+  treatment.
+- The accent dots are buttons with a translated accessible name and `aria-pressed`. The idle
+  artwork is decorative and marked `aria-hidden`.
+- `web/src/accent.test.ts` covers detection, unsupported values, storage failures, persistence,
+  and applying the root attribute. The translation test covers the English and Dutch key sets;
+  the label values themselves are checked by review.
+- Checked in Chromium on 2026-11-13 at 1440×900, 1280×600, 1280×720, 900×640, 844×560,
+  844×390, 700×600, 390×844, and 320×568, in English and Dutch. Every accent swaps the
+  instrument, the choice survives a reload, the Studio follows it on load and when another
+  tab changes it, and the idle copy stays legible over all five artworks. The short/wide split
+  stage was checked at 1280×600, 900×640, 844×560, 700×600, and 844×390. A pass on WebKitGTK
+  (Tauri) and Windows WebView2 remains.
+- The stored accent is applied by the entry module. The CSP forbids an inline pre-paint script,
+  so a first load can briefly show the lime default before the module runs.
+
 ## Performance
 
 Measured with headless Chromium (software rendering) against a local server and a fake

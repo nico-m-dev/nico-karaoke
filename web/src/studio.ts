@@ -1,6 +1,7 @@
 import "./styles.css";
 import "./studio.css";
 
+import { ACCENT_STORAGE_KEY, applyAccent, detectAccent } from "./accent";
 import {
   fetchLyrics,
   getLibraryItem,
@@ -1836,4 +1837,10 @@ function showToast(message: string): void {
   }, 3600);
 }
 
+applyAccent(detectAccent());
+window.addEventListener("storage", (event) => {
+  if (event.key === ACCENT_STORAGE_KEY || event.key === null) {
+    applyAccent(detectAccent());
+  }
+});
 void boot();

@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p dist/NicoKaraoke-linux-x86_64
           cp target/release/nico-karaoke-desktop dist/NicoKaraoke-linux-x86_64/
-          cp README.md LICENSE NOTICE dist/NicoKaraoke-linux-x86_64/
+          cp README.md LICENSE dist/NicoKaraoke-linux-x86_64/
           (cd dist && tar -czf NicoKaraoke-linux-x86_64.tar.gz NicoKaraoke-linux-x86_64)
       - uses: actions/upload-artifact@v7
         with:
@@ -68,7 +68,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist/NicoKaraoke-windows-x86_64 | Out-Null
           Copy-Item target/release/nico-karaoke-desktop.exe dist/NicoKaraoke-windows-x86_64/
-          Copy-Item -Path README.md, LICENSE, NOTICE -Destination dist/NicoKaraoke-windows-x86_64/
+          Copy-Item -Path README.md, LICENSE -Destination dist/NicoKaraoke-windows-x86_64/
       - uses: actions/upload-artifact@v7
         with:
           name: NicoKaraoke-windows-x86_64

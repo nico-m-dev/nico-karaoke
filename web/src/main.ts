@@ -30,8 +30,24 @@ import {
   type Anchor,
   type FillRect,
 } from "./player";
-import headLogo from "./assets/nico-head.png";
+import { applyAccent, detectAccent, isAccent, rememberAccent, type Accent } from "./accent";
+import idleCyan from "./assets/idle-cyan.webp";
+import idleElectricBlue from "./assets/idle-electricblue.webp";
+import idleLime from "./assets/idle-lime.webp";
+import idleMagenta from "./assets/idle-magenta.webp";
+import idleOrange from "./assets/idle-orange.webp";
 import { currentFirst, matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
+
+const artwork: Record<Accent, string> = {
+  cyan: idleCyan,
+  "electric-blue": idleElectricBlue,
+  lime: idleLime,
+  magenta: idleMagenta,
+  orange: idleOrange,
+};
+
+let accent: Accent = detectAccent();
+applyAccent(accent);
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) {
@@ -69,11 +85,12 @@ app.innerHTML = `
     </footer>
 
     <section class="idle" id="idle">
+      <p class="eyebrow idle-eyebrow" data-i18n="app.title"></p>
+      <div class="idle-art" aria-hidden="true">
+        <img class="idle-art-image" id="idle-art" src="${artwork[accent]}" alt="" decoding="async" />
+      </div>
+      <div class="idle-scrim" aria-hidden="true"></div>
       <div class="idle-inner">
-        <div class="mark-wrap" aria-hidden="true">
-          <img class="mark" src="${headLogo}" alt="" />
-        </div>
-        <p class="eyebrow" data-i18n="app.title"></p>
         <h1 data-i18n="player.idle.title"></h1>
         <p class="hint" data-i18n="player.idle.lead"></p>
         <p class="hint players-hint" id="idle-hint"></p>
@@ -82,6 +99,13 @@ app.innerHTML = `
           <div class="languages" role="group" data-i18n-aria-label="lang.label">
             <button type="button" data-language="nl" data-i18n-title="language.nl">NL</button>
             <button type="button" data-language="en" data-i18n-title="language.en">EN</button>
+          </div>
+          <div class="accents" role="group" data-i18n-aria-label="accent.label">
+            <button class="accent-dot" type="button" data-accent="cyan" data-i18n-title="accent.cyan" data-i18n-aria-label="accent.cyan"></button>
+            <button class="accent-dot" type="button" data-accent="electric-blue" data-i18n-title="accent.electric_blue" data-i18n-aria-label="accent.electric_blue"></button>
+            <button class="accent-dot" type="button" data-accent="lime" data-i18n-title="accent.lime" data-i18n-aria-label="accent.lime"></button>
+            <button class="accent-dot" type="button" data-accent="magenta" data-i18n-title="accent.magenta" data-i18n-aria-label="accent.magenta"></button>
+            <button class="accent-dot" type="button" data-accent="orange" data-i18n-title="accent.orange" data-i18n-aria-label="accent.orange"></button>
           </div>
         </div>
       </div>
@@ -128,6 +152,7 @@ const els = {
   play: query<HTMLButtonElement>("#play"),
   time: query<HTMLElement>("#time"),
   idle: query<HTMLElement>("#idle"),
+  idleArt: query<HTMLImageElement>("#idle-art"),
   idleHint: query<HTMLElement>("#idle-hint"),
   library: query<HTMLElement>("#library"),
   libraryList: query<HTMLElement>("#library-list"),
@@ -240,6 +265,24 @@ function updateLanguageButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.language === language));
   });
+}
+
+function updateAccentButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>(".accent-dot").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.accent === accent));
+  });
+}
+
+function setAccent(next: Accent, persist = true): void {
+  accent = next;
+  if (persist) {
+    rememberAccent(next);
+  }
+  applyAccent(next);
+  if (els.idleArt.getAttribute("src") !== artwork[next]) {
+    els.idleArt.src = artwork[next];
+  }
+  updateAccentButtons();
 }
 
 function setText(element: HTMLElement, text: string): void {
@@ -1128,6 +1171,15 @@ function bind(): void {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>(".accent-dot").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = button.dataset.accent ?? null;
+      if (isAccent(next)) {
+        setAccent(next);
+      }
+    });
+  });
+
   document.querySelector<HTMLButtonElement>("#library-btn")?.addEventListener("click", () => {
     void openLibrary();
   });
@@ -1242,6 +1294,7 @@ function bind(): void {
 }
 
 bind();
+updateAccentButtons();
 setLanguage(language, false);
 document.body.dataset.state = "idle";
 void poll();

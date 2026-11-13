@@ -101,6 +101,7 @@ fn content_type(path: &str) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("json") => "application/json",
         Some("png") => "image/png",
+        Some("webp") => "image/webp",
         Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",
         Some("woff2") => "font/woff2",
@@ -120,7 +121,8 @@ mod tests {
             "text/javascript; charset=utf-8"
         );
         assert_eq!(content_type("assets/app.css"), "text/css; charset=utf-8");
-        assert_eq!(content_type("assets/nico-head.png"), "image/png");
+        assert_eq!(content_type("assets/app.png"), "image/png");
+        assert_eq!(content_type("assets/idle-lime.webp"), "image/webp");
         assert_eq!(content_type("no-extension"), "application/octet-stream");
     }
 

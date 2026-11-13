@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/nico-head.png">
-    <img src="src-tauri/icons/128x128.png" alt="Nico Karaoke" width="96">
-  </picture>
+  <img src="src-tauri/icons/128x128.png" alt="Nico Karaoke" width="96">
 </p>
 
 <h1 align="center">Nico Karaoke</h1>
@@ -56,6 +53,7 @@ require an account.
 | `F` | toggle fullscreen |
 | `Library` | open the searchable library |
 | `NL` / `EN` | switch language on the idle screen |
+| Accent dots | switch the accent colour on the idle screen (remembered) |
 
 Open an item in the **Studio** to correct its text or timing. The Studio never writes without an
 explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch.
@@ -265,8 +263,8 @@ on YouTube or Spotify. Editing, restoring the original, and timing all live in t
 
 The Studio is a separate page, served at `/editor`. Open it from a library item, or visit
 `/editor` to edit the current track. It loads one song at a time and never writes without an
-explicit save. The Studio uses the language chosen on the player's idle screen; the only
-language switch in the app lives there.
+explicit save. The Studio uses the language and accent chosen on the player's idle screen; both
+switches live there.
 
 - Header: title, artist, source, original availability, play/pause, position, duration, save,
   dirty state, and fetch/restore actions. Play/pause controls the followed player and is
@@ -376,6 +374,4 @@ docs/              roadmap and testing evidence
 
 ## Licence
 
-The source code, documentation, and app icon are MIT licensed; see `LICENSE`. The head mark in
-`web/src/assets/` is a personal brand asset, excluded from that licence and all rights
-reserved; see `NOTICE`.
+The source code, documentation, and app icon are MIT licensed; see `LICENSE`.
