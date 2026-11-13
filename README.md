@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="../../releases">All releases</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
   <a href="#for-developers">Build from source</a>
 </p>
 
@@ -44,9 +45,35 @@ require an account.
 - Stays local: no audio capture, telemetry, analytics, or uploads.
 - English and Dutch interface.
 
+## Download and install
+
+Download the latest release from the [Releases page](../../releases). Both builds are portable:
+extract the archive and run the executable. There is no installer and no automatic update.
+
+### Linux (x86_64)
+
+1. Download `NicoKaraoke-<version>-linux-x86_64.tar.gz` and extract it.
+2. Run `./NicoKaraoke`.
+
+The binary is built on Ubuntu 24.04 and needs WebKitGTK 4.1, GTK 3, libsoup 3, and librsvg.
+On Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libsoup3 librsvg`. On Debian/Ubuntu:
+`sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0 libsoup-3.0-0 librsvg2-2`.
+
+### Windows (x86_64)
+
+1. Download `NicoKaraoke-<version>-windows-x86_64.zip` and extract it.
+2. Run `NicoKaraoke.exe`.
+
+Windows needs the WebView2 runtime; Windows 11 includes it and most Windows 10 systems already
+have it. The build is not code-signed, so SmartScreen may show an "Unknown publisher" warning.
+
+Each release also includes `SHA256SUMS.txt`. On Linux, run `sha256sum -c SHA256SUMS.txt` in the
+download folder; on Windows, compare the archive with
+`Get-FileHash <archive> -Algorithm SHA256`.
+
 ## How to use
 
-1. Install the app from the [Releases page](../../releases).
+1. Download and extract the app for your platform; see [Download and install](#download-and-install).
 2. Play a song in YouTube, Spotify, or another supported player.
 3. Open Nico Karaoke. It follows the song and finds the lyrics.
 4. Press Space to play or pause, F for fullscreen, or open the Library to browse saved lyrics.
@@ -352,7 +379,7 @@ See `docs/testing.md` for the manual player matrix, accessibility notes, and the
 measurements. Dependencies have no npm advisories; the ESLint toolchain pins a fixed `minimatch`
 through a package override.
 
-### CI and test builds
+### CI, test builds, and releases
 
 `.github/workflows/ci.yml` runs the Rust checks on Linux and Windows and the web checks on
 Linux for pushes to `main` and pull requests. Documentation-only changes are skipped.
@@ -363,10 +390,14 @@ executable (plus the README and licence). The frontend is embedded in the execut
 is no separate `web` folder to keep next to it. The Windows build is a test build, not an
 installer; SmartScreen may warn because it is not code-signed yet.
 
+The **Release** workflow runs on `v*` tags. It checks that the tag matches the Cargo and npm
+versions, runs the tests and builds, writes `SHA256SUMS.txt`, and creates a draft GitHub
+Release. The draft is reviewed and published by hand.
+
 ### Repository layout
 
 ```text
-.github/           CI and test-build workflows
+.github/           CI, test-build, and release workflows
 crates/core/       domain logic and configuration
 crates/platform/   MPRIS and SMTC boundary
 crates/server/     local Axum server, runtime, and static assets

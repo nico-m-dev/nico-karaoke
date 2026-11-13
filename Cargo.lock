@@ -2176,7 +2176,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nico-karaoke-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "directories",
@@ -2193,7 +2193,7 @@ dependencies = [
 
 [[package]]
 name = "nico-karaoke-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "gtk",
@@ -2210,7 +2210,7 @@ dependencies = [
 
 [[package]]
 name = "nico-karaoke-platform"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "nico-karaoke-core",
@@ -2221,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "nico-karaoke-server"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",

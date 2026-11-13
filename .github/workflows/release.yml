@@ -1,0 +1,186 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12
+      - name: Check tag, versions, changelog, and release notes
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          web=$(node -p "require('./web/package.json').version")
+          root=$(node -p "require('./package.json').version")
+
+          echo "tag=$GITHUB_REF_NAME version=$version web=$web root=$root"
+
+          case "$tag" in
+            "$version"|"$version"-rc.*) ;;
+            *)
+              echo "::error::tag $GITHUB_REF_NAME does not match version $version"
+              exit 1
+              ;;
+          esac
+
+          test "$web" = "$version" || {
+            echo "::error::web package version $web does not match $version"
+            exit 1
+          }
+          test "$root" = "$version" || {
+            echo "::error::root package version $root does not match $version"
+            exit 1
+          }
+          grep -q "^## \[$version\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no $version section"
+            exit 1
+          }
+          test -f "docs/releases/v${version}.md" || {
+            echo "::error::missing docs/releases/v${version}.md"
+            exit 1
+          }
+
+  linux:
+    name: Linux build
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            librsvg2-dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm test --prefix web
+      - run: npm run build --prefix web
+      - run: cargo test --workspace --locked
+      - run: cargo build --release --locked -p nico-karaoke-desktop
+      - name: Stage portable archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/NicoKaraoke
+          cp target/release/nico-karaoke-desktop dist/NicoKaraoke/NicoKaraoke
+          cp README.md LICENSE CHANGELOG.md dist/NicoKaraoke/
+          tar -C dist -czf "dist/NicoKaraoke-${version}-linux-x86_64.tar.gz" NicoKaraoke
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Windows build
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run build --prefix web
+      - run: cargo build --release --locked -p nico-karaoke-desktop
+      - name: Stage portable archive
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          New-Item -ItemType Directory -Force -Path dist/NicoKaraoke | Out-Null
+          Copy-Item target/release/nico-karaoke-desktop.exe dist/NicoKaraoke/NicoKaraoke.exe
+          Copy-Item README.md, LICENSE, CHANGELOG.md dist/NicoKaraoke/
+          Compress-Archive -Path dist/NicoKaraoke -DestinationPath "dist/NicoKaraoke-$version-windows-x86_64.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  draft:
+    name: Draft GitHub Release
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum NicoKaraoke-*.tar.gz NicoKaraoke-*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$notes" ]; then
+            notes="docs/releases/v${version}.md"
+          fi
+          rendered="$(mktemp)"
+          sed "s/{{VERSION}}/${version}/g" "$notes" > "$rendered"
+
+          prerelease=()
+          case "$version" in
+            *-*) prerelease=(--prerelease) ;;
+          esac
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/NicoKaraoke-*.tar.gz \
+              dist/NicoKaraoke-*.zip \
+              dist/SHA256SUMS.txt \
+              --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "Nico Karaoke $version" \
+              --notes-file "$rendered" \
+              "${prerelease[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/NicoKaraoke-*.tar.gz \
+              dist/NicoKaraoke-*.zip \
+              dist/SHA256SUMS.txt \
+              --draft \
+              --title "Nico Karaoke $version" \
+              --notes-file "$rendered" \
+              "${prerelease[@]}"
+          fi
