@@ -183,6 +183,18 @@ The song titles, artist names, and lyrics are fictional and written for the capt
 personal data or third-party artwork is shown. The idle, player, library, and Studio screens
 were refreshed after the neutral surface and accent palette change.
 
+## Release build
+
+- On 2026-11-13 the 1.0.0 desktop binary was built with
+  `cargo build --release --locked -p nico-karaoke-desktop` after `npm run build --prefix web`.
+- The staged portable archive (`NicoKaraoke-1.0.0-linux-x86_64.tar.gz`) contains `NicoKaraoke`,
+  `README.md`, `LICENSE`, and `CHANGELOG.md`.
+- Running `NicoKaraoke` from an empty directory with an empty data directory reported
+  `version: 1.0.0` from `/api/health`, served the idle screen, and returned the embedded
+  `idle-lime.webp` as `image/webp` with `X-Content-Type-Options: nosniff`.
+- The CI release builds, the release candidate archives, and the real Windows acceptance run
+  still need to be completed before publishing.
+
 ## Manual player matrix
 
 | Area | Linux | Windows |
