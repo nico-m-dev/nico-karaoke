@@ -350,9 +350,21 @@ See `docs/testing.md` for the manual player matrix, accessibility notes, and the
 measurements. Dependencies have no npm advisories; the ESLint toolchain pins a fixed `minimatch`
 through a package override.
 
+### CI and test builds
+
+`.github/workflows/ci.yml` runs the Rust checks on Linux and Windows and the web checks on
+Linux for pushes to `main` and pull requests. Documentation-only changes are skipped.
+
+The **Build test artifacts** workflow can be started manually from the Actions tab. It produces
+an unsigned Linux `.tar.gz` and a Windows zip, each containing the desktop executable and the
+`web/` assets next to it. Extract the archive and run the executable from that folder. Keep the
+`web` folder next to the executable. The Windows build is a test build, not an installer;
+SmartScreen may warn because it is not code-signed yet.
+
 ### Repository layout
 
 ```text
+.github/           CI and test-build workflows
 crates/core/       domain logic and configuration
 crates/platform/   MPRIS and SMTC boundary
 crates/server/     local Axum server, runtime, and static assets

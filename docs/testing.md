@@ -22,6 +22,11 @@ npm run build --prefix web
 The Windows platform crate is compile-checked on Linux. A full Windows workspace check needs
 the MSVC linker, so CI runs it on `windows-latest`.
 
+GitHub Actions runs the Rust checks on Linux and Windows and the web checks on Linux. The manual
+**Build test artifacts** workflow produces unsigned Linux and Windows test builds with the
+executable and `web/` assets; the Windows build is the first real SMTC test target before a
+public release.
+
 ## Server hardening
 
 - The server only accepts loopback `Host` values and local `Origin` values. Foreign requests
