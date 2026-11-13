@@ -10,10 +10,10 @@
 
 <p align="center">
   <a href="../../releases">
-    <img src="https://img.shields.io/badge/Download-Linux-9ece6a?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux">
+    <img src="https://img.shields.io/badge/Download-Linux-a8e63f?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux">
   </a>
   <a href="../../releases">
-    <img src="https://img.shields.io/badge/Download-Windows-9ece6a?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows">
+    <img src="https://img.shields.io/badge/Download-Windows-a8e63f?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows">
   </a>
 </p>
 
@@ -28,6 +28,10 @@ require an account.
 
 <p align="center">
   <img src="docs/screenshots/player.png" alt="The player showing synchronised lyrics, with the current line filling green" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/idle.png" alt="The idle screen with a vintage radio, the library button, the language switch, and five accent colour dots" width="820">
 </p>
 
 ## What it does

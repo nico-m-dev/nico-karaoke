@@ -180,7 +180,8 @@ step. A full release acceptance pass on the Studio remains.
 
 The screenshots in `docs/screenshots/` were captured against an isolated demo data directory.
 The song titles, artist names, and lyrics are fictional and written for the captures; no
-personal data or third-party artwork is shown.
+personal data or third-party artwork is shown. The idle, player, library, and Studio screens
+were refreshed after the neutral surface and accent palette change.
 
 ## Manual player matrix
 

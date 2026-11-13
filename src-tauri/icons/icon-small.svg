@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="190" fill="#0a0f0c"/>
+  <rect width="1024" height="1024" rx="190" fill="#0a0a0c"/>
 
   <g transform="translate(250 190)">
-    <rect x="60" y="0" width="200" height="420" rx="100" fill="#f2f7ef"/>
-    <g stroke="#0a0f0c" stroke-width="22" stroke-linecap="round">
+    <rect x="60" y="0" width="200" height="420" rx="100" fill="#f1f1f4"/>
+    <g stroke="#0a0a0c" stroke-width="22" stroke-linecap="round">
       <path d="M110 120h100"/>
       <path d="M110 210h100"/>
       <path d="M110 300h100"/>
     </g>
-    <path d="M0 290v50c0 88 70 158 160 158s160-70 160-158v-50" fill="none" stroke="#f2f7ef" stroke-width="54" stroke-linecap="round"/>
-    <path d="M160 502v150" stroke="#f2f7ef" stroke-width="54" stroke-linecap="round"/>
-    <path d="M62 652h196" stroke="#f2f7ef" stroke-width="54" stroke-linecap="round"/>
+    <path d="M0 290v50c0 88 70 158 160 158s160-70 160-158v-50" fill="none" stroke="#f1f1f4" stroke-width="54" stroke-linecap="round"/>
+    <path d="M160 502v150" stroke="#f1f1f4" stroke-width="54" stroke-linecap="round"/>
+    <path d="M62 652h196" stroke="#f1f1f4" stroke-width="54" stroke-linecap="round"/>
   </g>
 
-  <g fill="#9ece6a">
+  <g fill="#a8e63f">
     <rect x="640" y="330" width="230" height="72" rx="36"/>
     <rect x="640" y="476" width="160" height="72" rx="36"/>
     <rect x="640" y="622" width="200" height="72" rx="36"/>
