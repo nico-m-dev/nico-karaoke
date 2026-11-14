@@ -62,6 +62,8 @@ a public release.
   stores the clean metadata and does not trigger a second lookup. A record whose length differs
   by more than the match tolerance stays pinned, survives an offset save as the current record,
   and an artist-variant record is reused instead of duplicated.
+- A lookup test pins the intentional rejection of a video that runs 67 seconds longer than the
+  song, even when the artist and title resolve: forcing it would misplace the song's timings.
 - An API test confirms that applying a fetch for a decorated video credit updates the existing
   record instead of creating a second one, and that deleting the clean record leaves the video
   missing without reloading it.

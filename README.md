@@ -134,7 +134,9 @@ Set `NICO_KARAOKE_DATA` to use a different data directory (development and porta
 
 - **No lyrics appear:** LRCLIB may not have that song. Choose **New lyrics** in the Library to
   type or paste your own text, or open the Studio and use **Fetch** after checking the title
-  and artist in your player.
+  and artist in your player. A YouTube video with a long intro or outro, or a different edit,
+  can be too far from the song's length; the app deliberately does not force a match there.
+  Try the same song in YouTube Music first.
 - **The app does not follow my player:** make sure the player publishes MPRIS on Linux or SMTC
   on Windows. With multiple players, pick one in the top bar.
 - **The lyrics are out of sync:** open the Studio and nudge the line or use tap mode.
@@ -265,6 +267,11 @@ cached for one hour. A temporary network failure is not cached as a miss. When t
 query finds nothing, one retry reads the performer from the title itself
 (`Artist - Song (Official Video)`), so a label channel such as Out Of Line Music still finds
 the song; the result is stored under that cleaner artist and title.
+
+The five-second duration rule is deliberate. A YouTube upload with a long intro or outro, or
+a different edit, is not forced to match a shorter song: the lyrics would keep the song's
+timings, and the same record would then be wrong when the song plays at its original length.
+YouTube Music usually reports the correct duration.
 
 ### Media providers
 

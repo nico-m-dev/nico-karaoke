@@ -284,6 +284,10 @@ impl LyricsLookup {
             }
         }
 
+        // A video with a long intro or outro can be a minute longer than the song. Do not drop
+        // the duration to force a match: the lyrics would keep the song's timings and the same
+        // record would then be wrong when the song plays at its original length.
+
         if !exact.iter().any(LrclibTrack::has_synced) {
             match self.client.search(&without_album).await {
                 Ok(items) => {
@@ -1051,6 +1055,7 @@ mod tests {
         assert_eq!(queries.len(), 2);
         assert_eq!(queries[1].title, "Feraline");
         assert_eq!(queries[1].artist, "Combichrist");
+        assert_eq!(queries[1].duration, Some(313));
     }
 
     #[tokio::test]
@@ -1081,6 +1086,39 @@ mod tests {
         };
         assert_eq!(record.title, "Party Time");
         assert_eq!(record.artist, "The Northern Boys");
+    }
+
+    #[tokio::test]
+    async fn does_not_accept_a_duration_far_from_the_song() {
+        let found = track(
+            13,
+            "Understand",
+            "Combichrist",
+            334.0,
+            Some("[00:01.00]Line\n"),
+            None,
+        );
+        let client = FakeClient::new(
+            vec![Ok(vec![]), Ok(vec![])],
+            vec![Ok(vec![]), Ok(vec![found])],
+        );
+        let lookup = LyricsLookup::new(client.clone());
+        let video = TrackQuery::new(
+            "Combichrist - Understand (Official Music Video)",
+            "Out Of Line Music",
+            "",
+            Some(400.721),
+        );
+
+        let outcome = lookup
+            .lookup_at(&video, 1000.0)
+            .await
+            .expect("lookup works");
+
+        // The video runs 67 seconds longer than the song. Accepting it would put the album
+        // timings on the video, and the shared record would then be wrong at the song length.
+        assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1000.0 });
+        assert_eq!(client.search_count(), 2);
     }
 
     #[tokio::test]
