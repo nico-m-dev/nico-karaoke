@@ -89,6 +89,7 @@ impl Fixture {
             }),
             web_dir: Arc::new(PathBuf::from("web/dist")),
             watcher: watcher.clone(),
+            updates: Arc::new(nico_karaoke_server::updates::DisabledUpdates),
         };
 
         Self {
@@ -1108,7 +1109,7 @@ async fn restore_requires_json_and_restores_the_original() {
                 .method(Method::POST)
                 .uri(format!("/api/library/{key}/original"))
                 .header(header::HOST, "127.0.0.1")
-                .header(header::ORIGIN, "null")
+                .header(header::ORIGIN, "http://127.0.0.1:8770")
                 .header(header::CONTENT_TYPE, "text/plain")
                 .body(Body::from("x"))
                 .expect("request builds"),

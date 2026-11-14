@@ -5,6 +5,7 @@ pub mod dto;
 pub mod logging;
 pub mod lrclib_http;
 pub mod runtime;
+pub mod updates;
 pub mod watcher;
 
 mod embedded;
@@ -21,6 +22,7 @@ use axum::routing::{any, get, post};
 use nico_karaoke_core::AppConfig;
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::updates::UpdateService;
 use crate::watcher::Watcher;
 
 #[derive(Clone)]
@@ -28,6 +30,7 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub web_dir: Arc<PathBuf>,
     pub watcher: Arc<Watcher>,
+    pub updates: Arc<dyn UpdateService>,
 }
 
 /// Whether the frontend was embedded into this binary at build time.
@@ -55,6 +58,9 @@ pub fn app(state: AppState) -> Router {
         .route("/api/lyrics/parse", post(api::parse_lyrics))
         .route("/api/lyrics/offset", post(api::set_offset))
         .route("/api/lyrics/fetch", post(api::fetch_lyrics))
+        .route("/api/update", get(api::update_status))
+        .route("/api/update/check", post(api::check_update))
+        .route("/api/update/install", post(api::install_update))
         .route("/api", any(api::not_found))
         .route("/api/{*path}", any(api::not_found));
 

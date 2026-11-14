@@ -7,9 +7,11 @@ Updated: 2026-11-14.
 
 ## After 1.0.0
 
-- Linux bundle formats (`.deb`, AppImage, or both) and Windows code signing if distribution
-  grows beyond portable archives.
-- Optional update notification against GitHub Releases; report only, never install silently.
+- Windows code signing (Authenticode) if SmartScreen warnings become a problem.
+- A Linux `.deb` and an Arch package for package-managed installs; those update through the
+  package manager and must not offer in-app updates.
+- Verify the first updater-enabled release end to end on Linux and Windows, including a failed
+  download, an offline start, and the restart.
 - macOS only when a real test machine is available.
 
 ## Later distribution
@@ -17,7 +19,8 @@ Updated: 2026-11-14.
 ### Omarchy / Arch
 
 - Add an Arch package (PKGBUILD) that installs the binary, web assets, a `.desktop` entry, and
-  an icon. Prefer a small release tarball over a Rust/Node toolchain build.
+  an icon. Prefer a small release tarball over a Rust/Node toolchain build. Package-managed
+  installs update through pacman, not the in-app updater.
 - Embed the web assets or install them as a package resource. The executable-relative fallback
   already works; a bundled resource path and a real package still need a build.
 - Align the `.desktop` filename, icon name, and actual window class so the launcher and

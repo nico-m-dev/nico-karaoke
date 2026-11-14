@@ -9,6 +9,7 @@ use nico_karaoke_core::{AppConfig, Library, LyricsLookup};
 use tokio::net::TcpListener;
 
 use crate::lrclib_http::HttpLyricsClient;
+use crate::updates::{DisabledUpdates, UpdateService};
 use crate::watcher::Watcher;
 use crate::{AppState, app};
 
@@ -76,6 +77,15 @@ pub fn web_dir_is_ready(web_dir: &Path) -> bool {
 /// Bind the socket and build the library, lookup, media provider, and watcher. The caller
 /// serves the result on the Tauri runtime or on the browser binary's Tokio runtime.
 pub async fn prepare(config: AppConfig, web_dir: PathBuf) -> Result<PreparedServer> {
+    prepare_with_updates(config, web_dir, Arc::new(DisabledUpdates)).await
+}
+
+/// Like [`prepare`], with the desktop shell's updater injected.
+pub async fn prepare_with_updates(
+    config: AppConfig,
+    web_dir: PathBuf,
+    updates: Arc<dyn UpdateService>,
+) -> Result<PreparedServer> {
     let (listener, port) = bind_listener(config.host, config.port)
         .await
         .context("failed to bind the local server")?;
@@ -102,6 +112,7 @@ pub async fn prepare(config: AppConfig, web_dir: PathBuf) -> Result<PreparedServ
             config: Arc::new(AppConfig { port, ..config }),
             web_dir: Arc::new(web_dir),
             watcher,
+            updates,
         },
         address,
     })

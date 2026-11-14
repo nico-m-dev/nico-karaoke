@@ -8,9 +8,18 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 
 ### Added
 
+- Signed in-app updates: the Settings panel shows the installed version, checks GitHub
+  Releases, and installs an update only after confirmation. An available update adds a badge
+  to the gear and a startup toast.
 - A Settings panel behind a gear on the idle screen, the player, and the Studio for choosing
   the accent colour. The idle accent dots moved into it; the language switch stays on the idle
   screen.
+
+### Changed
+
+- Linux releases are AppImages and Windows releases are per-user NSIS installers, replacing
+  the portable archives. Both are signed for the updater; package-managed builds are not
+  offered yet.
 
 ### Fixed
 

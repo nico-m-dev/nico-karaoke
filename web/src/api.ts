@@ -90,6 +90,33 @@ export type LibraryItemResponse = {
   current: boolean;
 };
 
+export type Health = {
+  status: string;
+  name: string;
+  version: string;
+  platform: string;
+  supported: boolean;
+};
+
+export type UpdatePhase =
+  | "disabled"
+  | "idle"
+  | "checking"
+  | "available"
+  | "up_to_date"
+  | "downloading"
+  | "installing"
+  | "error";
+
+export type UpdateStatus = {
+  supported: boolean;
+  phase: UpdatePhase;
+  version: string | null;
+  notes: string | null;
+  progress: number | null;
+  error: string | null;
+};
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -130,6 +157,22 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = 5000): Pr
 
 export function getNow(): Promise<Now> {
   return request<Now>("/api/now");
+}
+
+export function getHealth(): Promise<Health> {
+  return request<Health>("/api/health");
+}
+
+export function getUpdate(): Promise<UpdateStatus> {
+  return request<UpdateStatus>("/api/update");
+}
+
+export function checkUpdate(): Promise<UpdateStatus> {
+  return request<UpdateStatus>("/api/update/check", { method: "POST" });
+}
+
+export function installUpdate(): Promise<UpdateStatus> {
+  return request<UpdateStatus>("/api/update/install", { method: "POST" });
 }
 
 export function choosePlayer(player: string): Promise<{ ok: boolean }> {

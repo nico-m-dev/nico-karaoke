@@ -10,6 +10,7 @@ import {
 } from "./accent";
 import {
   fetchLyrics,
+  getHealth,
   getLibraryItem,
   getNow,
   parseLyrics,
@@ -86,6 +87,7 @@ import {
   type TimelineElements,
 } from "./studio/view";
 import { createSettingsPanel } from "./settings";
+import { createUpdateStore } from "./updates";
 
 function query<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -197,17 +199,45 @@ let tapOriginals: (number | null)[] = [];
 let tapSnapshot: EditorSnapshot | null = null;
 let tapTimer: number | null = null;
 
+const updates = createUpdateStore();
 const settings = createSettingsPanel({
   language,
   accent,
   background: () => [els.studio],
   onAccent: (next) => chooseAccent(next),
+  onCheckUpdate: () => void updates.check(),
+  onInstallUpdate: () => {
+    if (dirty) {
+      showToast(t(language, "studio.update_save_first"));
+      return;
+    }
+    void updates.install();
+  },
+});
+let availableUpdate: string | null = null;
+
+void getHealth()
+  .then((health) => settings.setVersion(health.version))
+  .catch(() => undefined);
+
+updates.subscribe((status) => {
+  settings.setUpdate(status);
+  availableUpdate = status.phase === "available" ? status.version : null;
+  refreshUpdateBadge();
 });
 
 function chooseAccent(next: Accent): void {
   accent = next;
   applyAccent(next);
   rememberAccent(next);
+}
+
+function refreshUpdateBadge(): void {
+  const available = availableUpdate !== null;
+  const label = t(language, available ? "settings.update_available" : "settings.open");
+  els.settings.classList.toggle("has-update", available);
+  els.settings.title = label;
+  els.settings.setAttribute("aria-label", label);
 }
 
 async function boot(): Promise<void> {
@@ -239,6 +269,7 @@ function applyLanguage(next: Language): void {
   document.title = t(next, "studio.page_title");
   applyTranslations(document, next);
   settings.setLanguage(next);
+  refreshUpdateBadge();
   if (booted) {
     renderStructure();
     if (tapPhase !== null) {
@@ -1874,4 +1905,5 @@ window.addEventListener("storage", (event) => {
     settings.setAccent(accent);
   }
 });
+void updates.start();
 void boot();

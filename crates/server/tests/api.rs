@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::body::Body;
@@ -9,6 +9,7 @@ use nico_karaoke_core::{
     AppConfig, FakeMediaProvider, LaunchMode, Library, LookupQuery, LrclibTrack, LyricsClient,
     LyricsError, LyricsLookup,
 };
+use nico_karaoke_server::updates::{UpdateError, UpdatePhase, UpdateService, UpdateStatus};
 use nico_karaoke_server::watcher::Watcher;
 use nico_karaoke_server::{AppState, api, app};
 use serde_json::Value;
@@ -24,6 +25,37 @@ impl LyricsClient for NoopLyrics {
 
     async fn search(&self, _query: &LookupQuery) -> Result<Vec<LrclibTrack>, LyricsError> {
         Ok(Vec::new())
+    }
+}
+
+struct FakeUpdates {
+    status: Mutex<UpdateStatus>,
+}
+
+impl FakeUpdates {
+    fn new() -> Self {
+        Self {
+            status: Mutex::new(UpdateStatus::idle()),
+        }
+    }
+}
+
+impl UpdateService for FakeUpdates {
+    fn status(&self) -> UpdateStatus {
+        self.status.lock().expect("status").clone()
+    }
+
+    fn check(&self) -> Result<(), UpdateError> {
+        *self.status.lock().expect("status") = UpdateStatus::available("1.1.0", None);
+        Ok(())
+    }
+
+    fn install(&self) -> Result<(), UpdateError> {
+        if self.status().phase != UpdatePhase::Available {
+            return Err(UpdateError::NoUpdate);
+        }
+        *self.status.lock().expect("status") = UpdateStatus::downloading("1.1.0", Some(0.0));
+        Ok(())
     }
 }
 
@@ -44,6 +76,7 @@ fn test_state() -> (AppState, tempfile::TempDir) {
             }),
             web_dir: Arc::new(PathBuf::from("web/dist")),
             watcher,
+            updates: Arc::new(nico_karaoke_server::updates::DisabledUpdates),
         },
         temp,
     )
@@ -77,6 +110,138 @@ async fn health_returns_ok_json() {
     assert!(payload["version"].is_string());
     assert!(payload["platform"].is_string());
     assert!(payload["supported"].is_boolean());
+}
+
+#[tokio::test]
+async fn update_endpoints_report_unsupported_on_the_browser_server() {
+    let (state, _temp) = test_state();
+
+    let response = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/api/update")
+                .header("host", "127.0.0.1")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("update status should be JSON");
+    assert_eq!(payload["supported"], false);
+    assert_eq!(payload["phase"], "disabled");
+
+    for path in ["/api/update/check", "/api/update/install"] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("host", "127.0.0.1")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should be readable")
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).expect("error should be JSON");
+        assert_eq!(payload["error"], "update_unsupported");
+    }
+}
+
+#[tokio::test]
+async fn update_service_drives_the_local_api() {
+    let (mut state, _temp) = test_state();
+    state.updates = Arc::new(FakeUpdates::new());
+
+    let response = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/api/update")
+                .header("host", "127.0.0.1")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body should be readable")
+        .to_bytes();
+    let payload: Value = serde_json::from_slice(&body).expect("status should be JSON");
+    assert_eq!(payload["phase"], "idle");
+
+    for (path, phase) in [
+        ("/api/update/check", "available"),
+        ("/api/update/install", "downloading"),
+    ] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("host", "127.0.0.1")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should be readable")
+            .to_bytes();
+        let payload: Value = serde_json::from_slice(&body).expect("status should be JSON");
+        assert_eq!(payload["phase"], phase);
+    }
+}
+
+#[tokio::test]
+async fn an_opaque_origin_cannot_mutate() {
+    let (state, _temp) = test_state();
+
+    let response = app(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/update/check")
+                .header("host", "127.0.0.1")
+                .header("origin", "null")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = app(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .header("host", "127.0.0.1")
+                .header("origin", "null")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]

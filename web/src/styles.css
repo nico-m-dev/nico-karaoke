@@ -306,11 +306,24 @@ body[data-playing="true"] .dot {
 }
 
 .settings-toggle {
+  position: relative;
   display: inline-grid;
   height: 2.2rem;
   font-size: 1rem;
   line-height: 1;
   place-items: center;
+}
+
+.settings-toggle.has-update::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
 }
 
 .ghost.danger {
@@ -615,6 +628,42 @@ body[data-state="playing"] .idle {
 
 .accent-swatch[data-accent="orange"] {
   --swatch: #f7a927;
+}
+
+.settings-about {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--panel-border);
+}
+
+.settings-version {
+  margin: 0 0 0.4rem;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.settings-version [data-settings-version] {
+  color: var(--muted);
+}
+
+.settings-update-status {
+  min-height: 1.2rem;
+  margin: 0 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.settings-update-detail {
+  margin: -0.2rem 0 0.55rem;
+  color: var(--danger);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .library {

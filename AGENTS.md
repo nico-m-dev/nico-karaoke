@@ -50,6 +50,10 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
   depend on HTTP, a window toolkit, or a specific desktop shell.
 - Media access sits behind a provider trait so tests can use a fake player.
 - LRCLIB access sits behind a client trait so tests never call the network.
+- Update checks and installs sit behind an `UpdateService` trait in the server. The desktop shell
+  injects the Tauri updater; the standalone server and browser fallback only report that updates
+  are unsupported. The updater private key never enters the repository; only the public key is
+  committed in the Tauri config.
 - HTTP handlers validate input and call domain services; they do not touch files directly.
 - Library writes are atomic and serialised. A failed write must not leave a half-written
   record.
@@ -79,6 +83,8 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
   edits and saves stay local; a contribution is explicit, previewed, and confirmed.
 - Word-level synchronisation is an opt-in advanced mode. Line-level lyrics and editing remain
   the default and never depend on word data.
+- In-app updates are signed and installed only after explicit confirmation. Development builds,
+  package-managed installs, and the browser fallback do not self-update.
 - Appearance options live in one Settings panel, reachable from the player, idle screen, and
   Studio. The language switch stays on the idle screen.
 - The player view stays deliberately quiet: playback, library, settings, Studio, fullscreen.

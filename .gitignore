@@ -39,6 +39,8 @@ docs/TASKS.md
 # Tauri
 /src-tauri/target/
 /src-tauri/gen/
+# Never commit the updater's private signing key
+*.key
 
 # Editors and operating systems
 .DS_Store

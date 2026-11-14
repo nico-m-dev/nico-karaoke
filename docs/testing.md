@@ -30,9 +30,11 @@ a public release.
 ## Server hardening
 
 - The server only accepts loopback `Host` values and local `Origin` values. Foreign requests
-  return `403` with `forbidden_host` and `no-store`.
-- API writes require `application/json`; malformed JSON, an unsupported content type, and
-  oversized bodies return stable JSON error codes.
+  return `403` with `forbidden_host` and `no-store`. An opaque `Origin: null` may read but cannot
+  mutate, so a sandboxed iframe cannot trigger an update install.
+- Body-carrying API writes require `application/json`; malformed JSON, an unsupported content
+  type, and oversized bodies return stable JSON error codes. The no-body update triggers rely on
+  the same Host/Origin checks.
 - Static serving rejects traversal attempts; tests cover encoded and plain `..` paths.
 - Every response, including errors and static files, carries `no-store` plus these headers:
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
@@ -81,6 +83,24 @@ a public release.
   the close button at 360 px.
 - Still to check on a real desktop (WebKitGTK and WebView2): the same flow against a live MPRIS
   or SMTC player, and that the player shows the new lyrics after returning.
+
+## In-app updates
+
+- The server exposes `GET /api/update`, `POST /api/update/check`, and `POST /api/update/install`.
+  The standalone server reports `supported: false`; tests cover the status payload and the
+  `update_unsupported` rejection.
+- Headless Chromium against a stubbed local API on 2026-11-14: the Settings panel shows the
+  version; a startup check sets the gear badge and a one-time toast; an available version shows
+  **Install update**; installing renders a stubbed 42% download state; a browser build hides the
+  update controls and shows only the version. The desktop service accumulates real byte counts;
+  that progress and the restart still need a live update run.
+- A release desktop build signed with a throwaway key reported `supported: true` and reached
+  the updater. The local bundle produced an AppImage and a `.sig`; the throwaway key was not
+  committed. With no `latest.json` in the published release, the status correctly became an
+  error rather than a silent success.
+- Still to check with the production key: a real update from the first installer build to the
+  next version on Linux (AppImage) and Windows (NSIS), including the restart, the library and
+  data directory staying intact, an offline start, and a rejected signature.
 
 ## Logs
 
@@ -226,6 +246,9 @@ were refreshed after the neutral surface and accent palette change. The idle scr
 refreshed on 2026-11-14 for the Settings panel.
 
 ## Release build
+
+This section records the 1.0.0 portable release. From the first updater-enabled release the
+artifacts are an AppImage and an NSIS installer, built and signed by the release workflow.
 
 - On 2026-11-13 the 1.0.0 desktop binary was built with
   `cargo build --release --locked -p nico-karaoke-desktop` after `npm run build --prefix web`.

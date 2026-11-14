@@ -10,8 +10,10 @@ description = "Native desktop shell for Nico Karaoke"
 anyhow.workspace = true
 nico-karaoke-core = { path = "../crates/core" }
 nico-karaoke-server = { path = "../crates/server" }
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 tokio.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true

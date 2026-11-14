@@ -1,15 +1,20 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::IsTerminal;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
 use nico_karaoke_core::{APP_NAME, APP_VERSION, AppConfig, ConfigError, LaunchMode};
+use nico_karaoke_server::updates::{DisabledUpdates, UpdateService};
 use nico_karaoke_server::{logging, runtime};
 use tauri::webview::NewWindowResponse;
 use tauri::window::Color;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tracing_appender::non_blocking::WorkerGuard;
+
+use crate::updates::DesktopUpdates;
+
+mod updates;
 
 struct LogGuard(#[allow(dead_code)] Mutex<Option<WorkerGuard>>);
 
@@ -106,7 +111,23 @@ fn local_view_url(raw: &str) -> anyhow::Result<tauri::Url> {
 /// The Windows SMTC provider initializes COM as MTA. Doing that on the Tauri main thread makes
 /// WebView2 window creation fail afterwards. The Python predecessor also kept its server on a
 /// separate thread, which kept the UI thread's COM apartment clean.
-fn start_server(config: AppConfig, web_dir: std::path::PathBuf) -> Result<String, String> {
+/// The updater only knows how to replace an AppImage on Linux. A `.deb`, Arch package, or raw
+/// binary must be updated by its package manager or manually.
+#[cfg(target_os = "linux")]
+fn updater_supported() -> bool {
+    std::env::var_os("APPIMAGE").is_some()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn updater_supported() -> bool {
+    true
+}
+
+fn start_server(
+    config: AppConfig,
+    web_dir: std::path::PathBuf,
+    updates: Arc<dyn UpdateService>,
+) -> Result<String, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::Builder::new()
         .name("nico-karaoke-server".to_owned())
@@ -121,13 +142,14 @@ fn start_server(config: AppConfig, web_dir: std::path::PathBuf) -> Result<String
                     return;
                 }
             };
-            let prepared = match runtime.block_on(runtime::prepare(config, web_dir)) {
-                Ok(prepared) => prepared,
-                Err(error) => {
-                    let _ = tx.send(Err(format!("{error:#}")));
-                    return;
-                }
-            };
+            let prepared =
+                match runtime.block_on(runtime::prepare_with_updates(config, web_dir, updates)) {
+                    Ok(prepared) => prepared,
+                    Err(error) => {
+                        let _ = tx.send(Err(format!("{error:#}")));
+                        return;
+                    }
+                };
             let url = prepared.url();
             if tx.send(Ok(url)).is_err() {
                 return;
@@ -176,16 +198,20 @@ fn main() {
         .ok()
         .filter(|value| !value.is_empty());
 
-    let result = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(
-            |app, _arguments, _cwd| {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            },
-        ))
+    let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(
+        |app, _arguments, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        },
+    ));
+    // Development builds never update themselves; the updater plugin only needs to exist in a
+    // release build, where the public key is configured.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let result = builder
         .setup(move |app| {
             let guard = logging::init_tracing(&config.data_dir);
             app.manage(LogGuard(Mutex::new(guard)));
@@ -211,7 +237,17 @@ fn main() {
                 std::process::exit(2);
             }
 
-            let server_url = match start_server(config.clone(), web_dir) {
+            let updates: Arc<dyn UpdateService> = if cfg!(debug_assertions) || !updater_supported()
+            {
+                Arc::new(DisabledUpdates)
+            } else {
+                DesktopUpdates::new(app.handle().clone())
+            };
+            if let Err(error) = updates.check() {
+                tracing::debug!(?error, "startup update check not started");
+            }
+
+            let server_url = match start_server(config.clone(), web_dir, updates) {
                 Ok(url) => url,
                 Err(error) => {
                     let message = format!("failed to start the local server: {error}");

@@ -5,6 +5,10 @@
   "description": "Local karaoke player and lyric studio",
   "scripts": {
     "app": "npm run build --prefix web && cargo run -p nico-karaoke-desktop",
-    "app:hmr": "node scripts/app-hmr.mjs"
+    "app:hmr": "node scripts/app-hmr.mjs",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
   }
 }

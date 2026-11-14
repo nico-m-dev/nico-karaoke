@@ -42,34 +42,43 @@ require an account.
 - Shows the active line filling green, including lines that wrap over several visual lines.
 - Keeps a searchable local library; the current song is listed first.
 - Includes a Studio for fixing text and timing, with tap mode and raw LRC editing.
-- Stays local: no audio capture, telemetry, analytics, or uploads.
+- Installs signed updates from the Settings panel, with an optional startup notice.
+- Stays local: no audio capture, telemetry, analytics, or content uploads.
 - English and Dutch interface.
 
 ## Download and install
 
-Download the latest release from the [Releases page](../../releases). Both builds are portable:
-extract the archive and run the executable. There is no installer and no automatic update.
+Download the latest release from the [Releases page](../../releases). Linux uses a single
+AppImage; Windows uses a per-user NSIS installer. Both are signed for in-app updates, so
+later versions arrive through **Settings → Check for updates**. The first release with the
+updater must be installed once manually; after that the app can update itself.
 
 ### Linux (x86_64)
 
-1. Download `NicoKaraoke-<version>-linux-x86_64.tar.gz` and extract it.
-2. Run `./NicoKaraoke`.
+1. Download `NicoKaraoke-<version>-linux-x86_64.AppImage`.
+2. Make it executable and run it: `chmod +x NicoKaraoke-*.AppImage && ./NicoKaraoke-*.AppImage`.
 
-The binary is built on Ubuntu 24.04 and needs WebKitGTK 4.1, GTK 3, libsoup 3, and librsvg.
-On Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libsoup3 librsvg`. On Debian/Ubuntu:
-`sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0 libsoup-3.0-0 librsvg2-2`.
+The AppImage bundles WebKitGTK and the other runtime libraries. It needs FUSE 2 and a working
+graphics stack. If it does not start, install FUSE 2 (`fuse2` on Arch, `libfuse2t64` on
+Ubuntu 24.04, `libfuse2` on older Debian/Ubuntu). Keep the AppImage in a writable folder so it
+can replace itself during an update.
+
+The AppImage is the auto-updating Linux build. A package-managed install (`.deb` or Arch
+package) updates through its package manager instead and is not offered yet.
 
 ### Windows (x86_64)
 
-1. Download `NicoKaraoke-<version>-windows-x86_64.zip` and extract it.
-2. Run `NicoKaraoke.exe`.
+1. Download `NicoKaraoke-<version>-windows-x86_64-setup.exe` and run it.
+2. The installer is per-user and does not require administrator rights.
 
 Windows needs the WebView2 runtime; Windows 11 includes it and most Windows 10 systems already
 have it. The build is not code-signed, so SmartScreen may show an "Unknown publisher" warning.
+The update signature is separate from Windows code signing and protects the downloaded update,
+not the first installer.
 
 Each release also includes `SHA256SUMS.txt`. On Linux, run `sha256sum -c SHA256SUMS.txt` in the
-download folder; on Windows, compare the archive with
-`Get-FileHash <archive> -Algorithm SHA256`.
+download folder; on Windows, compare the installer with
+`Get-FileHash <installer> -Algorithm SHA256`.
 
 ## How to use
 
@@ -138,7 +147,11 @@ The `library/` folder contains one `.lrc` and one `.json` file per saved song. T
 holds `nico-karaoke.log` and its backups. Lyrics are requested from LRCLIB when needed; nothing
 is uploaded and there is no account, telemetry, analytics, or remote logging.
 
-Set `NICO_KARAOKE_DATA` to use a different data directory (development and portable use).
+A release build checks GitHub Releases for a signed update when it starts. That request carries
+no personal data, and an update is downloaded and installed only after you confirm it in
+Settings. Development builds and the browser fallback do not check for updates.
+
+Set `NICO_KARAOKE_DATA` to use a different data directory (development and tests).
 
 ## If something does not work
 
@@ -150,6 +163,11 @@ Set `NICO_KARAOKE_DATA` to use a different data directory (development and porta
 - **The app does not follow my player:** make sure the player publishes MPRIS on Linux or SMTC
   on Windows. With multiple players, pick one in the top bar.
 - **The lyrics are out of sync:** open the Studio and nudge the line or use tap mode.
+- **No update is offered:** only the AppImage and the Windows installer can update themselves.
+  Development builds and the browser fallback do not check. Open **Settings** to see the
+  version and run a manual check.
+- **An update fails:** retry from **Settings**; GitHub Releases must be reachable. If it keeps
+  failing, install the latest release from the Releases page.
 - **Something else:** open an issue on GitHub with the app version, your OS, the player, and
   what you expected.
 
@@ -368,14 +386,18 @@ are not part of the everyday workflow and would live in a separate section.
 
 The local HTTP API returns JSON and never caches responses. It is only reachable from this
 machine: a missing or foreign `Host` and a foreign `Origin` are rejected, so binding the server
-to another interface does not grant remote access. API writes require JSON and a bounded
-body. Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+to another interface does not grant remote access. Body-carrying API writes require JSON and a
+bounded body; the update triggers take no body but use the same Host/Origin checks. Every
+response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, and a self-only
 content security policy. Static serving rejects path traversal.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | server and platform status |
+| `GET` | `/api/update` | update status: supported, phase, version, progress |
+| `POST` | `/api/update/check` | start a signed update check |
+| `POST` | `/api/update/install` | download and install the available update |
 | `GET` | `/api/now` | current track, players, and lyrics state |
 | `POST` | `/api/player` | choose the followed player |
 | `POST` | `/api/control` | play, pause, or seek |
@@ -424,14 +446,25 @@ through a package override.
 Linux for pushes to `main` and pull requests. Documentation-only changes are skipped.
 
 The **Build test artifacts** workflow can be started manually from the Actions tab. It produces
-an unsigned Linux `.tar.gz` and a Windows zip, each containing a self-contained desktop
-executable (plus the README and licence). The frontend is embedded in the executable, so there
-is no separate `web` folder to keep next to it. The Windows build is a test build, not an
-installer; SmartScreen may warn because it is not code-signed yet.
+a signed Linux AppImage and a signed Windows NSIS installer; both need the updater secrets
+listed below. The frontend is embedded in the executable, so there is no separate `web` folder
+to keep next to it. SmartScreen may warn because the Windows installer is not code-signed yet.
+This workflow is for packaging checks; only the release workflow writes the `latest.json`
+manifest used by the updater.
 
 The **Release** workflow runs on `v*` tags. It checks that the tag matches the Cargo and npm
-versions, runs the tests and builds, writes `SHA256SUMS.txt`, and creates a draft GitHub
-Release. The draft is reviewed and published by hand.
+versions, runs the tests, builds and signs the AppImage and NSIS installer, writes
+`latest.json`, and creates a draft GitHub Release. The draft is reviewed and published by hand;
+the in-app updater only sees a published, non-prerelease release.
+
+The signing key is a Tauri updater key, not a Windows code-signing certificate. It is generated
+once with `npx tauri signer generate -w ~/.tauri/nico-karaoke.key`. Keep the private key and its
+password safe; put them in the repository's Actions secrets as
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The public key belongs in
+`src-tauri/tauri.conf.json` under `plugins.updater.pubkey` and is safe to commit. Losing the
+private key means existing installations can no longer receive updates. A local bundle build
+needs the same two environment variables; for an unsigned local test, disable updater artifacts
+with `--config '{"bundle":{"createUpdaterArtifacts":false}}'`.
 
 ### Repository layout
 

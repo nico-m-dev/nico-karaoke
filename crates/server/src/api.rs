@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use axum::Json;
 use axum::extract::{FromRequest, Path, Request, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use nico_karaoke_core::{
@@ -18,6 +18,7 @@ use crate::AppState;
 use crate::dto::{
     ErrorDto, LibraryDto, LibraryItemResponse, LyricsDto, NowDto, OkResponse, ParsedLyricsDto,
 };
+use crate::updates::{UpdateError, UpdateStatus};
 use crate::watcher::{NewLibraryItem, WatcherError};
 
 /// Enough for a maximum working text plus a maximum preserved original.
@@ -48,6 +49,24 @@ pub async fn health() -> Json<HealthResponse> {
 
 pub async fn now(State(state): State<AppState>) -> Json<NowDto> {
     Json(NowDto::from_state(&state.watcher.state(), Instant::now()))
+}
+
+pub async fn update_status(State(state): State<AppState>) -> Json<UpdateStatus> {
+    Json(state.updates.status())
+}
+
+pub async fn check_update(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<UpdateStatus>), ApiError> {
+    state.updates.check().map_err(update_error)?;
+    Ok((StatusCode::ACCEPTED, Json(state.updates.status())))
+}
+
+pub async fn install_update(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<UpdateStatus>), ApiError> {
+    state.updates.install().map_err(update_error)?;
+    Ok((StatusCode::ACCEPTED, Json(state.updates.status())))
 }
 
 pub async fn library(State(state): State<AppState>) -> Json<LibraryDto> {
@@ -448,7 +467,7 @@ pub async fn not_found() -> impl IntoResponse {
 }
 
 pub async fn local_only(State(state): State<AppState>, request: Request, next: Next) -> Response {
-    if !is_local_request(&state.config, request.headers()) {
+    if !is_local_request(&state.config, request.method(), request.headers()) {
         return no_store_response(
             api_error(StatusCode::FORBIDDEN, "forbidden_host").into_response(),
         );
@@ -523,7 +542,7 @@ where
     }
 }
 
-fn is_local_request(config: &AppConfig, headers: &HeaderMap) -> bool {
+fn is_local_request(config: &AppConfig, method: &Method, headers: &HeaderMap) -> bool {
     // Fail closed: the Host header is the DNS-rebinding guard, so a missing or empty header
     // is treated as a foreign request instead of skipping validation.
     let Some(host) = headers
@@ -541,19 +560,22 @@ fn is_local_request(config: &AppConfig, headers: &HeaderMap) -> bool {
         .get(header::ORIGIN)
         .and_then(|value| value.to_str().ok())
     {
-        if origin != "null" {
-            let Ok(uri) = origin.parse::<axum::http::Uri>() else {
+        if origin == "null" {
+            // A sandboxed iframe on any site can send an opaque origin. Reads are harmless,
+            // but mutations must never be drive-by triggerable.
+            return matches!(*method, Method::GET | Method::HEAD);
+        }
+        let Ok(uri) = origin.parse::<axum::http::Uri>() else {
+            return false;
+        };
+        if let Some(host) = uri.host() {
+            let host = host
+                .strip_prefix('[')
+                .and_then(|value| value.strip_suffix(']'))
+                .unwrap_or(host)
+                .to_ascii_lowercase();
+            if !allowed_host(config, &host) {
                 return false;
-            };
-            if let Some(host) = uri.host() {
-                let host = host
-                    .strip_prefix('[')
-                    .and_then(|value| value.strip_suffix(']'))
-                    .unwrap_or(host)
-                    .to_ascii_lowercase();
-                if !allowed_host(config, &host) {
-                    return false;
-                }
             }
         }
     }
@@ -634,6 +656,14 @@ fn watcher_error(error: WatcherError) -> ApiError {
             tracing::warn!(error = %error, "lyrics lookup failed");
             api_error(StatusCode::BAD_GATEWAY, "lyrics_unavailable")
         }
+    }
+}
+
+fn update_error(error: UpdateError) -> ApiError {
+    match error {
+        UpdateError::Unsupported => api_error(StatusCode::CONFLICT, "update_unsupported"),
+        UpdateError::Busy => api_error(StatusCode::CONFLICT, "update_busy"),
+        UpdateError::NoUpdate => api_error(StatusCode::CONFLICT, "update_not_available"),
     }
 }
 

@@ -32,9 +32,9 @@ jobs:
           echo "tag=$GITHUB_REF_NAME version=$version web=$web root=$root"
 
           case "$tag" in
-            "$version"|"$version"-rc.*) ;;
+            "$version") ;;
             *)
-              echo "::error::tag $GITHUB_REF_NAME does not match version $version"
+              echo "::error::tag $GITHUB_REF_NAME must match the version in Cargo.toml exactly ($version); bump the version for a prerelease"
               exit 1
               ;;
           esac
@@ -55,6 +55,23 @@ jobs:
             echo "::error::missing docs/releases/v${version}.md"
             exit 1
           }
+          node - <<'NODE'
+          const config = require("./src-tauri/tauri.conf.json");
+          const key = config.plugins?.updater?.pubkey ?? "";
+          if (!key || key.startsWith("REPLACE_")) {
+            console.error("::error::set plugins.updater.pubkey in src-tauri/tauri.conf.json");
+            process.exit(1);
+          }
+          if (config.plugins?.updater?.requireSignedVersion !== true) {
+            console.error("::error::plugins.updater.requireSignedVersion must be true");
+            process.exit(1);
+          }
+          const endpoints = config.plugins?.updater?.endpoints ?? [];
+          if (!endpoints.some((url) => url.includes(process.env.GITHUB_REPOSITORY))) {
+            console.error("::error::the updater endpoint does not name this repository");
+            process.exit(1);
+          }
+          NODE
 
   linux:
     name: Linux build
@@ -77,23 +94,39 @@ jobs:
         with:
           node-version: 22.12
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - run: npm ci
       - run: npm ci --prefix web
       - run: npm test --prefix web
       - run: npm run build --prefix web
       - run: cargo test --workspace --locked
-      - run: cargo build --release --locked -p nico-karaoke-desktop
-      - name: Stage portable archive
+      - name: Build AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || {
+            echo "::error::missing TAURI_SIGNING_PRIVATE_KEY repository secret"
+            exit 1
+          }
+          npx tauri build --bundles appimage
+      - name: Stage AppImage
         run: |
           version="${GITHUB_REF_NAME#v}"
-          mkdir -p dist/NicoKaraoke
-          cp target/release/nico-karaoke-desktop dist/NicoKaraoke/NicoKaraoke
-          cp README.md LICENSE CHANGELOG.md dist/NicoKaraoke/
-          tar -C dist -czf "dist/NicoKaraoke-${version}-linux-x86_64.tar.gz" NicoKaraoke
+          mkdir -p dist
+          appimage=$(find target -type f -path "*/release/bundle/appimage/*.AppImage" | head -n1)
+          test -n "$appimage" || {
+            echo "::error::AppImage was not produced"
+            exit 1
+          }
+          cp "$appimage" "dist/NicoKaraoke-${version}-linux-x86_64.AppImage"
+          cp "$appimage.sig" "dist/NicoKaraoke-${version}-linux-x86_64.AppImage.sig"
       - uses: actions/upload-artifact@v7
         with:
           name: linux
-          path: dist/*.tar.gz
+          path: dist/*
           if-no-files-found: error
           retention-days: 7
 
@@ -110,22 +143,40 @@ jobs:
         with:
           node-version: 22.12
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - run: npm ci
       - run: npm ci --prefix web
       - run: npm run build --prefix web
-      - run: cargo build --release --locked -p nico-karaoke-desktop
-      - name: Stage portable archive
+      - name: Build NSIS installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Error "::error::missing TAURI_SIGNING_PRIVATE_KEY repository secret"
+            exit 1
+          }
+          npx tauri build --bundles nsis
+      - name: Stage installer
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          New-Item -ItemType Directory -Force -Path dist/NicoKaraoke | Out-Null
-          Copy-Item target/release/nico-karaoke-desktop.exe dist/NicoKaraoke/NicoKaraoke.exe
-          Copy-Item README.md, LICENSE, CHANGELOG.md dist/NicoKaraoke/
-          Compress-Archive -Path dist/NicoKaraoke -DestinationPath "dist/NicoKaraoke-$version-windows-x86_64.zip"
+          $setup = Get-ChildItem -Path target -Recurse -Filter "*-setup.exe" |
+            Where-Object { $_.FullName -match "bundle\\nsis" } |
+            Select-Object -First 1
+          if (-not $setup) {
+            Write-Error "::error::NSIS installer was not produced"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $setup.FullName "dist/NicoKaraoke-$version-windows-x86_64-setup.exe"
+          Copy-Item "$($setup.FullName).sig" "dist/NicoKaraoke-$version-windows-x86_64-setup.exe.sig"
       - uses: actions/upload-artifact@v7
         with:
           name: windows
-          path: dist/*.zip
+          path: dist/*
           if-no-files-found: error
           retention-days: 7
 
@@ -142,10 +193,35 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Build updater manifest
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          linux_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/NicoKaraoke-${version}-linux-x86_64.AppImage"
+          windows_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/NicoKaraoke-${version}-windows-x86_64-setup.exe"
+          linux_sig=$(tr -d '\r\n' < "dist/NicoKaraoke-${version}-linux-x86_64.AppImage.sig")
+          windows_sig=$(tr -d '\r\n' < "dist/NicoKaraoke-${version}-windows-x86_64-setup.exe.sig")
+          pub_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          jq -n \
+            --arg version "$version" \
+            --arg pub_date "$pub_date" \
+            --arg linux_signature "$linux_sig" \
+            --arg windows_signature "$windows_sig" \
+            --arg linux_url "$linux_url" \
+            --arg windows_url "$windows_url" \
+            '{
+              version: $version,
+              notes: "",
+              pub_date: $pub_date,
+              platforms: {
+                "linux-x86_64": { signature: $linux_signature, url: $linux_url },
+                "windows-x86_64": { signature: $windows_signature, url: $windows_url }
+              }
+            }' > dist/latest.json
+          cat dist/latest.json
       - name: Checksums
         run: |
           cd dist
-          sha256sum NicoKaraoke-*.tar.gz NicoKaraoke-*.zip > SHA256SUMS.txt
+          sha256sum NicoKaraoke-*.AppImage NicoKaraoke-*-setup.exe latest.json > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Create or update draft release
         env:
@@ -166,9 +242,17 @@ jobs:
           esac
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            is_draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::release $GITHUB_REF_NAME is already published; bump the version instead of replacing live assets"
+              exit 1
+            fi
             gh release upload "$GITHUB_REF_NAME" \
-              dist/NicoKaraoke-*.tar.gz \
-              dist/NicoKaraoke-*.zip \
+              dist/NicoKaraoke-*.AppImage \
+              dist/NicoKaraoke-*.AppImage.sig \
+              dist/NicoKaraoke-*-setup.exe \
+              dist/NicoKaraoke-*-setup.exe.sig \
+              dist/latest.json \
               dist/SHA256SUMS.txt \
               --clobber
             gh release edit "$GITHUB_REF_NAME" \
@@ -177,8 +261,11 @@ jobs:
               "${prerelease[@]}"
           else
             gh release create "$GITHUB_REF_NAME" \
-              dist/NicoKaraoke-*.tar.gz \
-              dist/NicoKaraoke-*.zip \
+              dist/NicoKaraoke-*.AppImage \
+              dist/NicoKaraoke-*.AppImage.sig \
+              dist/NicoKaraoke-*-setup.exe \
+              dist/NicoKaraoke-*-setup.exe.sig \
+              dist/latest.json \
               dist/SHA256SUMS.txt \
               --draft \
               --title "Nico Karaoke $version" \

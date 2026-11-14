@@ -1,5 +1,6 @@
 import { ACCENTS, type Accent } from "./accent";
-import { applyTranslations, type Language, type MessageKey } from "./i18n";
+import type { UpdateStatus } from "./api";
+import { applyTranslations, t, type Language, type MessageKey } from "./i18n";
 
 const ACCENT_MESSAGES: Record<Accent, MessageKey> = {
   cyan: "accent.cyan",
@@ -15,6 +16,8 @@ export type SettingsPanel = {
   isOpen: () => boolean;
   setLanguage: (language: Language) => void;
   setAccent: (accent: Accent) => void;
+  setVersion: (version: string) => void;
+  setUpdate: (status: UpdateStatus) => void;
 };
 
 type SettingsOptions = {
@@ -23,12 +26,16 @@ type SettingsOptions = {
   /** Elements that must not be reachable while the panel is open. */
   background: () => HTMLElement[];
   onAccent: (accent: Accent) => void;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
 };
 
 /** One shared appearance panel for the player, idle screen, and Studio. */
 export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
   let language = options.language;
   let accent = options.accent;
+  let version = "—";
+  let update: UpdateStatus | null = null;
   let opener: HTMLElement | null = null;
   let inerted: HTMLElement[] = [];
 
@@ -46,6 +53,17 @@ export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
       </header>
       <p class="settings-label" data-i18n="settings.accent"></p>
       <div class="settings-accents" role="group" data-i18n-aria-label="settings.accent"></div>
+      <section class="settings-about">
+        <p class="settings-label" data-i18n="settings.about"></p>
+        <p class="settings-version"><span data-i18n="settings.version"></span> <span data-settings-version>—</span></p>
+        <p class="settings-update-status" data-settings-update-status></p>
+        <p class="sr-only" role="status" data-settings-update-live></p>
+        <p class="settings-update-detail" data-settings-update-detail hidden></p>
+        <div class="settings-update-actions">
+          <button class="ghost" type="button" data-settings-check data-i18n="update.check"></button>
+          <button class="ghost primary" type="button" data-settings-install data-i18n="update.install" hidden></button>
+        </div>
+      </section>
     </aside>
   `;
   document.body.append(overlay);
@@ -53,11 +71,34 @@ export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
   const card = overlay.querySelector<HTMLElement>(".settings-card");
   const closeButton = overlay.querySelector<HTMLButtonElement>("[data-settings-close]");
   const group = overlay.querySelector<HTMLElement>(".settings-accents");
-  if (!card || !closeButton || !group) {
+  const versionValue = overlay.querySelector<HTMLElement>("[data-settings-version]");
+  const updateStatus = overlay.querySelector<HTMLElement>("[data-settings-update-status]");
+  const updateDetail = overlay.querySelector<HTMLElement>("[data-settings-update-detail]");
+  const updateLive = overlay.querySelector<HTMLElement>("[data-settings-update-live]");
+  const checkButton = overlay.querySelector<HTMLButtonElement>("[data-settings-check]");
+  const installButton = overlay.querySelector<HTMLButtonElement>("[data-settings-install]");
+  if (
+    !card ||
+    !closeButton ||
+    !group ||
+    !versionValue ||
+    !updateStatus ||
+    !updateDetail ||
+    !updateLive ||
+    !checkButton ||
+    !installButton
+  ) {
     throw new Error("Settings panel markup is incomplete");
   }
   const panel = card;
   const closeControl = closeButton;
+  const versionEl = versionValue;
+  const statusEl = updateStatus;
+  const detailEl = updateDetail;
+  const liveEl = updateLive;
+  const checkControl = checkButton;
+  const installControl = installButton;
+  let lastAnnouncedPhase: string | null = null;
 
   const swatches = ACCENTS.map((value) => {
     const button = document.createElement("button");
@@ -93,6 +134,94 @@ export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
   function setLanguage(next: Language): void {
     language = next;
     applyTranslations(overlay, next);
+    lastAnnouncedPhase = null;
+    renderUpdate();
+  }
+
+  function setVersion(next: string): void {
+    version = next;
+    versionEl.textContent = version;
+  }
+
+  function setUpdate(next: UpdateStatus): void {
+    update = next;
+    renderUpdate();
+  }
+
+  function renderUpdate(): void {
+    versionEl.textContent = version;
+    const status = update;
+    if (!status || !status.supported) {
+      statusEl.textContent = "";
+      detailEl.textContent = "";
+      detailEl.hidden = true;
+      liveEl.textContent = "";
+      lastAnnouncedPhase = null;
+      checkControl.hidden = true;
+      checkControl.disabled = false;
+      checkControl.textContent = t(language, "update.check");
+      installControl.hidden = true;
+      installControl.disabled = false;
+      return;
+    }
+
+    const busy =
+      status.phase === "checking" ||
+      status.phase === "downloading" ||
+      status.phase === "installing";
+    checkControl.hidden = status.phase === "downloading" || status.phase === "installing";
+    checkControl.disabled = busy;
+    checkControl.textContent = t(
+      language,
+      status.phase === "checking" ? "update.checking" : "update.check",
+    );
+    installControl.hidden = status.phase !== "available";
+    installControl.disabled = status.phase !== "available";
+
+    switch (status.phase) {
+      case "checking":
+        statusEl.textContent = t(language, "update.checking");
+        break;
+      case "available":
+        statusEl.textContent = t(language, "update.available", {
+          version: status.version ?? "",
+        });
+        break;
+      case "up_to_date":
+        statusEl.textContent = t(language, "update.up_to_date");
+        break;
+      case "downloading": {
+        const percent = status.progress === null ? null : Math.round(status.progress * 100);
+        statusEl.textContent =
+          percent === null
+            ? t(language, "update.downloading_unknown", { version: status.version ?? "" })
+            : t(language, "update.downloading", {
+                version: status.version ?? "",
+                percent,
+              });
+        break;
+      }
+      case "installing":
+        statusEl.textContent = t(language, "update.installing");
+        break;
+      case "error":
+        statusEl.textContent = t(
+          language,
+          status.version ? "update.install_failed" : "update.error",
+        );
+        break;
+      default:
+        statusEl.textContent = "";
+        break;
+    }
+
+    const detail = status.phase === "error" ? (status.error ?? "") : "";
+    detailEl.textContent = detail;
+    detailEl.hidden = detail === "";
+    if (lastAnnouncedPhase !== status.phase) {
+      lastAnnouncedPhase = status.phase;
+      liveEl.textContent = statusEl.textContent;
+    }
   }
 
   function open(nextOpener: HTMLElement | null): void {
@@ -156,6 +285,8 @@ export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
   }
 
   closeControl.addEventListener("click", close);
+  checkControl.addEventListener("click", () => options.onCheckUpdate());
+  installControl.addEventListener("click", () => options.onInstallUpdate());
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) {
       close();
@@ -200,5 +331,13 @@ export function createSettingsPanel(options: SettingsOptions): SettingsPanel {
   setLanguage(language);
   setAccent(accent);
 
-  return { open, close, isOpen: () => !overlay.hidden, setLanguage, setAccent };
+  return {
+    open,
+    close,
+    isOpen: () => !overlay.hidden,
+    setLanguage,
+    setAccent,
+    setVersion,
+    setUpdate,
+  };
 }

@@ -3,6 +3,7 @@ import {
   ApiError,
   choosePlayer,
   deleteLibraryItem,
+  getHealth,
   getLibrary,
   getLibraryItem,
   getNow,
@@ -38,6 +39,7 @@ import {
   type Accent,
 } from "./accent";
 import { createSettingsPanel } from "./settings";
+import { createUpdateStore } from "./updates";
 import idleCyan from "./assets/idle-cyan.webp";
 import idleElectricBlue from "./assets/idle-electricblue.webp";
 import idleLime from "./assets/idle-lime.webp";
@@ -232,11 +234,28 @@ let detailBusy = false;
 /** Track identity of the rendered "no lyrics yet" card, so a poll can detect a change. */
 let libraryCardTrack = "";
 
+const updates = createUpdateStore();
 const settings = createSettingsPanel({
   language,
   accent,
   background: () => [els.stage],
   onAccent: (next) => setAccent(next),
+  onCheckUpdate: () => void updates.check(),
+  onInstallUpdate: () => void updates.install(),
+});
+let availableUpdate: string | null = null;
+
+void getHealth()
+  .then((health) => settings.setVersion(health.version))
+  .catch(() => undefined);
+
+updates.subscribe((status) => {
+  settings.setUpdate(status);
+  availableUpdate = status.phase === "available" ? status.version : null;
+  refreshUpdateBadge();
+  if (status.phase === "available" && status.version) {
+    notifyUpdate(status.version);
+  }
 });
 
 function trackKey(track: Track | null): string {
@@ -273,6 +292,7 @@ function setLanguage(next: Language, persist = true): void {
   document.title = t(next, "app.title");
   applyTranslations(app, next);
   settings.setLanguage(next);
+  refreshUpdateBadge();
   updateLanguageButtons();
   updateTrackTexts(data.track);
   updateIdleHint(data.players);
@@ -836,6 +856,28 @@ function showToast(message: string): void {
     els.toast.classList.remove("show");
     els.toast.textContent = "";
   }, 4200);
+}
+
+function refreshUpdateBadge(): void {
+  const available = availableUpdate !== null;
+  const label = t(language, available ? "settings.update_available" : "settings.open");
+  for (const button of [els.settingsBtn, els.settingsIdle]) {
+    button.classList.toggle("has-update", available);
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  }
+}
+
+function notifyUpdate(version: string): void {
+  try {
+    if (window.localStorage.getItem("nico.updateNotified") === version) {
+      return;
+    }
+    window.localStorage.setItem("nico.updateNotified", version);
+  } catch {
+    // A persisted notification is optional; the badge still shows the update.
+  }
+  showToast(t(language, "update.available_toast", { version }));
 }
 
 function updateLibraryNewAction(): void {
@@ -1411,6 +1453,7 @@ bind();
 setLanguage(language, false);
 document.body.dataset.state = "idle";
 els.topbar.inert = true;
+void updates.start();
 void poll();
 window.setInterval(() => {
   if (!document.hidden) {
