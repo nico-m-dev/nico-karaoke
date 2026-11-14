@@ -305,6 +305,14 @@ body[data-playing="true"] .dot {
   padding: 0.42rem;
 }
 
+.settings-toggle {
+  display: inline-grid;
+  height: 2.2rem;
+  font-size: 1rem;
+  line-height: 1;
+  place-items: center;
+}
+
 .ghost.danger {
   border-color: rgba(255, 140, 122, 0.35);
   color: var(--danger);
@@ -478,71 +486,135 @@ body[data-state="playing"] .idle {
   color: var(--accent);
 }
 
-.accents {
+.idle-action-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.5rem;
 }
 
-.accent-dot {
+.settings {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  padding: 1rem;
+  background: rgb(3 3 5 / 0.72);
+}
+
+.settings-card {
+  width: min(26rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  padding: 1.2rem;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 1.1rem;
+  background: var(--panel);
+  animation: card-in 120ms ease-out;
+}
+
+.settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-head h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: -0.03em;
+}
+
+.settings-head .hint {
+  max-width: 19rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+}
+
+.settings-label {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-accents {
   display: grid;
-  width: 2.2rem;
-  height: 2.2rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  place-items: center;
-  transition: border-color 160ms ease;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
 }
 
-.accent-dot::before {
-  content: "";
-  width: 0.82rem;
-  height: 0.82rem;
-  border-radius: 999px;
-  background: var(--dot);
+.accent-swatch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.7rem;
+  background: rgb(var(--bg-rgb) / 0.35);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: left;
   transition:
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
 }
 
-.accent-dot:hover {
-  border-color: rgb(255 255 255 / 0.16);
+.accent-swatch:hover,
+.accent-swatch:focus-visible {
+  border-color: rgb(var(--accent-rgb) / 0.5);
+  color: var(--text);
 }
 
-.accent-dot:hover::before {
-  transform: scale(1.12);
+.accent-swatch[aria-pressed="true"] {
+  border-color: var(--swatch);
+  background: rgb(var(--bg-rgb) / 0.55);
+  color: var(--text);
 }
 
-.accent-dot[aria-pressed="true"] {
-  border-color: var(--dot);
+.accent-swatch-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  border-radius: 999px;
+  background: var(--swatch);
+  transition: box-shadow 160ms ease;
 }
 
-.accent-dot[aria-pressed="true"]::before {
-  box-shadow: 0 0 0.65rem var(--dot);
-  transform: scale(1.1);
+.accent-swatch[aria-pressed="true"] .accent-swatch-dot {
+  box-shadow:
+    0 0 0 0.2rem rgb(255 255 255 / 0.12),
+    0 0 0.65rem var(--swatch);
 }
 
-.accent-dot[data-accent="cyan"] {
-  --dot: #22d3ee;
+.accent-swatch[data-accent="cyan"] {
+  --swatch: #22d3ee;
 }
 
-.accent-dot[data-accent="electric-blue"] {
-  --dot: #4d9dfb;
+.accent-swatch[data-accent="electric-blue"] {
+  --swatch: #4d9dfb;
 }
 
-.accent-dot[data-accent="lime"] {
-  --dot: #a8e63f;
+.accent-swatch[data-accent="lime"] {
+  --swatch: #a8e63f;
 }
 
-.accent-dot[data-accent="magenta"] {
-  --dot: #ef5fc6;
+.accent-swatch[data-accent="magenta"] {
+  --swatch: #ef5fc6;
 }
 
-.accent-dot[data-accent="orange"] {
-  --dot: #f7a927;
+.accent-swatch[data-accent="orange"] {
+  --swatch: #f7a927;
 }
 
 .library {
@@ -889,9 +961,18 @@ body[data-state="playing"] .idle {
     margin-top: 1.2rem;
   }
 
-  .accent-dot {
-    width: 2.5rem;
-    height: 2.5rem;
+  .settings {
+    align-items: flex-end;
+    padding: 0.5rem;
+  }
+
+  .settings-card {
+    width: 100%;
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .settings-accents {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -986,8 +1067,9 @@ body[data-state="playing"] .idle {
   .library-item,
   .line-row,
   .tap-button,
-  .accent-dot,
-  .accent-dot::before {
+  .settings-card,
+  .accent-swatch,
+  .accent-swatch-dot {
     animation: none !important;
     transition: none !important;
   }

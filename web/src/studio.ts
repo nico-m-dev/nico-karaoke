@@ -1,7 +1,13 @@
 import "./styles.css";
 import "./studio.css";
 
-import { ACCENT_STORAGE_KEY, applyAccent, detectAccent } from "./accent";
+import {
+  ACCENT_STORAGE_KEY,
+  applyAccent,
+  detectAccent,
+  rememberAccent,
+  type Accent,
+} from "./accent";
 import {
   fetchLyrics,
   getLibraryItem,
@@ -79,6 +85,7 @@ import {
   updatePlayhead,
   type TimelineElements,
 } from "./studio/view";
+import { createSettingsPanel } from "./settings";
 
 function query<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -94,6 +101,7 @@ const els = {
   back: query<HTMLAnchorElement>("#studio-back"),
   title: query<HTMLElement>("#studio-title"),
   subtitle: query<HTMLElement>("#studio-subtitle"),
+  settings: query<HTMLButtonElement>("#studio-settings"),
   saveState: query<HTMLElement>("#studio-save-state"),
   undo: query<HTMLButtonElement>("#studio-undo"),
   save: query<HTMLButtonElement>("#studio-save"),
@@ -143,6 +151,7 @@ const timelineElements: TimelineElements = {
 };
 
 let language: Language = detectLanguage();
+let accent: Accent = detectAccent();
 let booted = false;
 let key: string | null = null;
 let boundTrackId: string | null = null;
@@ -188,6 +197,19 @@ let tapOriginals: (number | null)[] = [];
 let tapSnapshot: EditorSnapshot | null = null;
 let tapTimer: number | null = null;
 
+const settings = createSettingsPanel({
+  language,
+  accent,
+  background: () => [els.studio],
+  onAccent: (next) => chooseAccent(next),
+});
+
+function chooseAccent(next: Accent): void {
+  accent = next;
+  applyAccent(next);
+  rememberAccent(next);
+}
+
 async function boot(): Promise<void> {
   applyLanguage(language);
   bindEvents();
@@ -216,6 +238,7 @@ function applyLanguage(next: Language): void {
   document.documentElement.lang = next;
   document.title = t(next, "studio.page_title");
   applyTranslations(document, next);
+  settings.setLanguage(next);
   if (booted) {
     renderStructure();
     if (tapPhase !== null) {
@@ -1305,6 +1328,9 @@ function bindEvents(): void {
   els.save.addEventListener("click", () => {
     void save();
   });
+  els.settings.addEventListener("click", () => {
+    settings.open(els.settings);
+  });
   els.undo.addEventListener("click", undo);
   els.back.addEventListener("click", (event) => {
     if (dirty && !window.confirm(t(language, "studio.discard_confirm"))) {
@@ -1460,6 +1486,9 @@ async function seekToTime(time: number): Promise<void> {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
+  if (settings.isOpen()) {
+    return;
+  }
   const typing = isTyping(event.target);
   const command = event.ctrlKey || event.metaKey;
   const target = event.target;
@@ -1837,10 +1866,12 @@ function showToast(message: string): void {
   }, 3600);
 }
 
-applyAccent(detectAccent());
+applyAccent(accent);
 window.addEventListener("storage", (event) => {
   if (event.key === ACCENT_STORAGE_KEY || event.key === null) {
-    applyAccent(detectAccent());
+    accent = detectAccent();
+    applyAccent(accent);
+    settings.setAccent(accent);
   }
 });
 void boot();

@@ -6,6 +6,12 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A Settings panel behind a gear on the idle screen, the player, and the Studio for choosing
+  the accent colour. The idle accent dots moved into it; the language switch stays on the idle
+  screen.
+
 ### Fixed
 
 - Create lyrics when a track's lookup found nothing: the Library now offers **New lyrics** and

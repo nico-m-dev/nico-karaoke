@@ -79,8 +79,10 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
   edits and saves stay local; a contribution is explicit, previewed, and confirmed.
 - Word-level synchronisation is an opt-in advanced mode. Line-level lyrics and editing remain
   the default and never depend on word data.
-- The player view stays deliberately quiet: playback, library, Studio, fullscreen. Editing
-  belongs in the Studio.
+- Appearance options live in one Settings panel, reachable from the player, idle screen, and
+  Studio. The language switch stays on the idle screen.
+- The player view stays deliberately quiet: playback, library, settings, Studio, fullscreen.
+  Editing belongs in the Studio.
 
 ## Non-goals
 

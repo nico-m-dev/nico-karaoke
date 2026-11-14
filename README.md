@@ -32,7 +32,7 @@ require an account.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/idle.png" alt="The idle screen with a vintage radio, the library button, the language switch, and five accent colour dots" width="820">
+  <img src="docs/screenshots/idle.png" alt="The idle screen with a vintage radio, the library and settings buttons, and the language switch" width="820">
 </p>
 
 ## What it does
@@ -84,7 +84,7 @@ download folder; on Windows, compare the archive with
 | `F` | toggle fullscreen |
 | `Library` | open the searchable library |
 | `NL` / `EN` | switch language on the idle screen |
-| Accent dots | switch the accent colour on the idle screen (remembered) |
+| Settings gear | choose the accent colour; the choice is remembered |
 
 Open an item in the **Studio** to correct its text or timing. The Studio never writes without an
 explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch. When
@@ -104,6 +104,16 @@ your own text instead.
 <p align="center">
   <img src="docs/screenshots/studio.png" alt="The Studio with the timeline, lyric lines, and inspector" width="820">
 </p>
+
+### Settings
+
+The gear button opens the settings panel. It is available in the top bar while a song is
+playing or paused, on the idle screen, and in the Studio. The panel holds the accent colour,
+with the choice remembered on this device and applied to the player, lyrics highlight, library,
+and Studio.
+
+The language switch stays on the idle screen: it is normally a one-time choice and does not
+need to be reachable during playback.
 
 ## What you need
 
@@ -319,8 +329,8 @@ on YouTube or Spotify. Editing, restoring the original, and timing all live in t
 
 The Studio is a separate page, served at `/editor`. Open it from a library item, or visit
 `/editor` to edit the current track. It loads one song at a time and never writes without an
-explicit save. The Studio uses the language and accent chosen on the player's idle screen; both
-switches live there.
+explicit save. The Studio follows the settings and accent chosen in the shared panel; the
+language switch stays on the idle screen because it is usually a one-time choice.
 
 - Header: title, artist, source, original availability, play/pause, position, duration, save,
   dirty state, and fetch/restore actions. Play/pause controls the followed player and is

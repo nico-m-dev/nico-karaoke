@@ -124,11 +124,20 @@ the session AT-SPI bus is stale: the socket exists but has no live listener. Res
   accent-tinted panel surface used by primary buttons; the lowest is magenta at 5.0:1, and
   cyan, lime, and orange exceed 6.9:1. Inactive lyric lines keep the existing large-text
   treatment.
-- The accent dots are buttons with a translated accessible name and `aria-pressed`. The idle
-  artwork is decorative and marked `aria-hidden`.
+- The accent swatches live in one shared Settings panel, reachable from the idle screen, the
+  top bar, and the Studio. They are buttons with a translated accessible name and
+  `aria-pressed`. The panel traps focus, closes on Escape or the backdrop, and returns focus to
+  the gear. The idle artwork remains decorative and marked `aria-hidden`.
 - `web/src/accent.test.ts` covers detection, unsupported values, storage failures, persistence,
   and applying the root attribute. The translation test covers the English and Dutch key sets;
   the label values themselves are checked by review.
+- Headless Chromium on 2026-11-14: the gear is visible on the idle screen, during playback, and
+  in the Studio. The panel shows five named swatches and marks the current one; cyan, magenta,
+  and orange apply immediately and survive a reload; Escape and the backdrop close it; focus
+  wraps and returns to the opener; the Dutch panel at 360 px uses one column without overflow.
+- The same run checked that global shortcuts are suspended while the panel is open, that Escape
+  works after clicking static card content, that the covered top bar is inert on the idle screen,
+  and that focus restore prefers a hit-testable control when idle and playback swap places.
 - Checked in Chromium on 2026-11-13 at 1440×900, 1280×600, 1280×720, 900×640, 844×560,
   844×390, 700×600, 390×844, and 320×568, in English and Dutch. Every accent swaps the
   instrument, the choice survives a reload, the Studio follows it on load and when another
@@ -213,7 +222,8 @@ step. A full release acceptance pass on the Studio remains.
 The screenshots in `docs/screenshots/` were captured against an isolated demo data directory.
 The song titles, artist names, and lyrics are fictional and written for the captures; no
 personal data or third-party artwork is shown. The idle, player, library, and Studio screens
-were refreshed after the neutral surface and accent palette change.
+were refreshed after the neutral surface and accent palette change. The idle screenshot was
+refreshed on 2026-11-14 for the Settings panel.
 
 ## Release build
 

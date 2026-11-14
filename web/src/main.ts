@@ -30,7 +30,14 @@ import {
   type Anchor,
   type FillRect,
 } from "./player";
-import { applyAccent, detectAccent, isAccent, rememberAccent, type Accent } from "./accent";
+import {
+  ACCENT_STORAGE_KEY,
+  applyAccent,
+  detectAccent,
+  rememberAccent,
+  type Accent,
+} from "./accent";
+import { createSettingsPanel } from "./settings";
 import idleCyan from "./assets/idle-cyan.webp";
 import idleElectricBlue from "./assets/idle-electricblue.webp";
 import idleLime from "./assets/idle-lime.webp";
@@ -82,6 +89,7 @@ app.innerHTML = `
         <select id="players" hidden></select>
       </label>
       <button class="ghost" id="library-btn" type="button" data-i18n="player.library"></button>
+      <button class="ghost icon settings-toggle" id="settings-btn" type="button" data-i18n-title="settings.open" data-i18n-aria-label="settings.open">⚙</button>
       <button class="ghost icon" id="fullscreen-btn" type="button" data-i18n-title="player.fullscreen" data-i18n-aria-label="player.fullscreen">⛶</button>
     </header>
 
@@ -101,17 +109,13 @@ app.innerHTML = `
         <p class="hint" data-i18n="player.idle.lead"></p>
         <p class="hint players-hint" id="idle-hint"></p>
         <div class="idle-actions">
-          <button class="ghost" id="library-idle" type="button" data-i18n="player.library"></button>
+          <div class="idle-action-row">
+            <button class="ghost" id="library-idle" type="button" data-i18n="player.library"></button>
+            <button class="ghost icon settings-toggle" id="settings-idle" type="button" data-i18n-title="settings.open" data-i18n-aria-label="settings.open">⚙</button>
+          </div>
           <div class="languages" role="group" data-i18n-aria-label="lang.label">
             <button type="button" data-language="nl" data-i18n-title="language.nl">NL</button>
             <button type="button" data-language="en" data-i18n-title="language.en">EN</button>
-          </div>
-          <div class="accents" role="group" data-i18n-aria-label="accent.label">
-            <button class="accent-dot" type="button" data-accent="cyan" data-i18n-title="accent.cyan" data-i18n-aria-label="accent.cyan"></button>
-            <button class="accent-dot" type="button" data-accent="electric-blue" data-i18n-title="accent.electric_blue" data-i18n-aria-label="accent.electric_blue"></button>
-            <button class="accent-dot" type="button" data-accent="lime" data-i18n-title="accent.lime" data-i18n-aria-label="accent.lime"></button>
-            <button class="accent-dot" type="button" data-accent="magenta" data-i18n-title="accent.magenta" data-i18n-aria-label="accent.magenta"></button>
-            <button class="accent-dot" type="button" data-accent="orange" data-i18n-title="accent.orange" data-i18n-aria-label="accent.orange"></button>
           </div>
         </div>
       </div>
@@ -169,7 +173,10 @@ const els = {
   libraryNew: query<HTMLButtonElement>("#library-new"),
   libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
   libraryClose: query<HTMLButtonElement>("#library-close"),
+  topbar: query<HTMLElement>("#topbar"),
   offline: query<HTMLElement>("#offline"),
+  settingsBtn: query<HTMLButtonElement>("#settings-btn"),
+  settingsIdle: query<HTMLButtonElement>("#settings-idle"),
   toast: query<HTMLElement>("#toast"),
 };
 
@@ -225,6 +232,13 @@ let detailBusy = false;
 /** Track identity of the rendered "no lyrics yet" card, so a poll can detect a change. */
 let libraryCardTrack = "";
 
+const settings = createSettingsPanel({
+  language,
+  accent,
+  background: () => [els.stage],
+  onAccent: (next) => setAccent(next),
+});
+
 function trackKey(track: Track | null): string {
   return track ? `${track.player}|${track.track_id}|${track.title}|${track.artist}` : "";
 }
@@ -258,6 +272,7 @@ function setLanguage(next: Language, persist = true): void {
   document.documentElement.lang = next;
   document.title = t(next, "app.title");
   applyTranslations(app, next);
+  settings.setLanguage(next);
   updateLanguageButtons();
   updateTrackTexts(data.track);
   updateIdleHint(data.players);
@@ -277,12 +292,6 @@ function updateLanguageButtons(): void {
   });
 }
 
-function updateAccentButtons(): void {
-  document.querySelectorAll<HTMLButtonElement>(".accent-dot").forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.accent === accent));
-  });
-}
-
 function setAccent(next: Accent, persist = true): void {
   accent = next;
   if (persist) {
@@ -292,7 +301,7 @@ function setAccent(next: Accent, persist = true): void {
   if (els.idleArt.getAttribute("src") !== artwork[next]) {
     els.idleArt.src = artwork[next];
   }
-  updateAccentButtons();
+  settings.setAccent(next);
 }
 
 function setText(element: HTMLElement, text: string): void {
@@ -655,6 +664,7 @@ function applyNow(next: Now): void {
   clearTimeout(idleTimer);
   idleTimer = 0;
   document.body.dataset.playing = String(track.playing);
+  els.topbar.inert = false;
   if (document.body.dataset.state !== "playing") {
     document.body.dataset.state = "playing";
     els.controls.hidden = false;
@@ -731,6 +741,7 @@ function goIdle(next: Now): void {
   els.stage.classList.remove("plain");
   document.body.dataset.state = "idle";
   document.body.dataset.playing = "false";
+  els.topbar.inert = true;
   els.controls.hidden = true;
   updateTrackTexts(null);
   els.track.replaceChildren();
@@ -1267,20 +1278,17 @@ function bind(): void {
     });
   });
 
-  document.querySelectorAll<HTMLButtonElement>(".accent-dot").forEach((button) => {
-    button.addEventListener("click", () => {
-      const next = button.dataset.accent ?? null;
-      if (isAccent(next)) {
-        setAccent(next);
-      }
-    });
-  });
-
   document.querySelector<HTMLButtonElement>("#library-btn")?.addEventListener("click", () => {
     void openLibrary();
   });
   document.querySelector<HTMLButtonElement>("#library-idle")?.addEventListener("click", () => {
     void openLibrary();
+  });
+  els.settingsBtn.addEventListener("click", () => {
+    settings.open(els.settingsBtn);
+  });
+  els.settingsIdle.addEventListener("click", () => {
+    settings.open(els.settingsIdle);
   });
   els.libraryNew.addEventListener("click", openNewLyrics);
   els.libraryClose.addEventListener("click", closeLibrary);
@@ -1351,6 +1359,9 @@ function bind(): void {
   window.addEventListener("orientationchange", recenter);
   document.addEventListener("fullscreenchange", recenter);
   window.addEventListener("keydown", (event) => {
+    if (settings.isOpen()) {
+      return;
+    }
     if (event.key === "Escape") {
       closeLibrary();
       return;
@@ -1388,12 +1399,18 @@ function bind(): void {
       void poll();
     }
   });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === ACCENT_STORAGE_KEY || event.key === null) {
+      setAccent(detectAccent(), false);
+    }
+  });
 }
 
 bind();
-updateAccentButtons();
 setLanguage(language, false);
 document.body.dataset.state = "idle";
+els.topbar.inert = true;
 void poll();
 window.setInterval(() => {
   if (!document.hidden) {
