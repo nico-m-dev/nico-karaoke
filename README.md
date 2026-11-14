@@ -261,7 +261,10 @@ startup a file of 5 MiB or more is rotated to `.1`; three backups are kept. Use
 LRCLIB is queried without an API key. Titles and channel-style artist names are cleaned
 first. The lookup tries an exact match with the album, then without it, then searches within
 five seconds of the known duration. A synchronised result wins over plain text, and a miss is
-cached for one hour. A temporary network failure is not cached as a miss.
+cached for one hour. A temporary network failure is not cached as a miss. When the normal
+query finds nothing, one retry reads the performer from the title itself
+(`Artist - Song (Official Video)`), so a label channel such as Out Of Line Music still finds
+the song; the result is stored under that cleaner artist and title.
 
 ### Media providers
 
@@ -295,11 +298,12 @@ When the current track has no saved text, the header offers **New lyrics** and t
 with a card for that track. Both open an unsaved Studio document bound to the current track;
 saving creates the record.
 
-A saved record is matched by cleaned title and artist. A decorated video title such as
-`Artist - Song (Official Video)` from a label channel also counts as the credit inside the
-title, so playing the same song from YouTube and YouTube Music reuses one record instead of
-adding a second. When both sides report a length, a clearly different one keeps a version
-apart. Existing duplicates are not merged automatically; deleting one copy is enough.
+A saved record is matched by cleaned title and artist. A video title that also contains the
+artist, such as `Artist - Song` or `Artist - Song (Official Video)`, counts as that credit, so
+playing the same song from YouTube and YouTube Music reuses one record instead of adding a
+second. The library keeps one record per artist and title, so an upload that runs slightly
+longer or shorter still uses that song's record. Existing duplicates are not merged
+automatically; deleting one copy is enough.
 
 Open an item to preview its saved text, open it in the Studio, delete it, or search for it
 on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.

@@ -46,24 +46,37 @@ pub fn strip_channel(artist: &str) -> String {
     CHANNEL_SUFFIX.replace(artist, "").trim().to_owned()
 }
 
-/// The artist and title hidden in a decorated video title such as
-/// `Artist - Song (Official Video)`. Only titles with a video/lyric decoration or a featured
-/// artist qualify: without one, `Song - Live` is far more likely the whole title than a credit.
-pub(crate) fn decorated_credit(title: &str) -> Option<(String, String)> {
-    let decorated =
-        DECORATION.is_match(title) || FEAT_PARENTHESIS.is_match(title) || FEAT_TAIL.is_match(title);
-    if !decorated {
-        return None;
-    }
-
+/// A `Artist - Title` credit inside a title. Version words such as `Live` are rejected so a
+/// title like `Song - Live` is not read as a credit, and one-character artist fragments are
+/// ignored just as `split_title` does.
+pub(crate) fn loose_credit(title: &str) -> Option<(String, String)> {
     let cleaned = clean(title);
     let captures = TITLE_SEPARATOR.captures(&cleaned)?;
     let left = captures.get(1)?.as_str().trim();
     let right = captures.get(2)?.as_str().trim();
-    if left.is_empty() || right.is_empty() || VERSION_SUFFIX.is_match(right) {
+    if left.chars().count() < 2 || right.is_empty() || VERSION_SUFFIX.is_match(right) {
         return None;
     }
     Some((left.to_owned(), right.to_owned()))
+}
+
+/// Other plausible `(artist, title)` readings when the title carries the performer. The
+/// conservative `split_title` result is the first choice and is not repeated here; callers
+/// use these only when that reading finds nothing.
+pub(crate) fn credit_alternatives(title: &str, artist: &str) -> Vec<(String, String)> {
+    let (strict_title, strict_artist) = split_title(title, artist);
+    let strict_artist = normalize(&strict_artist);
+    let strict_title = normalize(&strict_title);
+    let mut alternatives: Vec<(String, String)> = Vec::new();
+    if let Some((credit_artist, credit_title)) = loose_credit(title) {
+        let artist_key = normalize(&credit_artist);
+        let title_key = normalize(&credit_title);
+        let known = artist_key == strict_artist && title_key == strict_title;
+        if !artist_key.is_empty() && !title_key.is_empty() && !known {
+            alternatives.push((credit_artist, credit_title));
+        }
+    }
+    alternatives
 }
 
 /// Normalise text for comparisons and record keys. Accents are folded, punctuation and case
@@ -165,18 +178,47 @@ mod tests {
     }
 
     #[test]
-    fn recovers_a_credit_from_a_decorated_video_title() {
+    fn recovers_a_credit_from_a_video_title() {
         assert_eq!(
-            decorated_credit("Combichrist - Feraline (Official Lyric Video)"),
+            loose_credit("Combichrist - Feraline (Official Lyric Video)"),
             Some(("Combichrist".to_owned(), "Feraline".to_owned()))
         );
         assert_eq!(
-            decorated_credit("Ghost B.C. - Year Zero (AUDIO)"),
+            loose_credit("Ghost B.C. - Year Zero (AUDIO)"),
             Some(("Ghost B.C.".to_owned(), "Year Zero".to_owned()))
         );
-        assert_eq!(decorated_credit("Song - Live"), None);
-        assert_eq!(decorated_credit("Song - Live (Official Video)"), None);
-        assert_eq!(decorated_credit("Song"), None);
+        assert_eq!(loose_credit("Song - Live"), None);
+        assert_eq!(loose_credit("Song - Live (Official Video)"), None);
+        assert_eq!(loose_credit("Song"), None);
+        assert_eq!(loose_credit("O - Burning"), None);
+        assert_eq!(loose_credit("A - B"), None);
+    }
+
+    #[test]
+    fn offers_a_plain_credit_as_a_lookup_fallback() {
+        assert_eq!(
+            loose_credit("The Northern Boys - Party Time"),
+            Some(("The Northern Boys".to_owned(), "Party Time".to_owned()))
+        );
+        assert_eq!(
+            credit_alternatives("The Northern Boys - Party Time", "Sindhu World"),
+            vec![("The Northern Boys".to_owned(), "Party Time".to_owned())]
+        );
+        assert_eq!(
+            credit_alternatives(
+                "Combichrist - Feraline (Official Lyric Video)",
+                "Out Of Line Music"
+            ),
+            vec![("Combichrist".to_owned(), "Feraline".to_owned())]
+        );
+    }
+
+    #[test]
+    fn keeps_a_clean_pair_and_version_words_out_of_the_fallback() {
+        assert!(credit_alternatives("Feraline", "Combichrist").is_empty());
+        assert!(credit_alternatives("Song - Live", "Someone Else").is_empty());
+        assert!(credit_alternatives("Song - Live (Official Video)", "Someone Else").is_empty());
+        assert!(credit_alternatives("O - Burning", "Foo Fighters").is_empty());
     }
 
     #[test]

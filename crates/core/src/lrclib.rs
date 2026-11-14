@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::library::{LIBRARY_VERSION, LyricRecord, LyricsSource, OriginalLyrics, normalize_text};
 use crate::lyrics::parse_lrc;
-use crate::title::{normalize, record_key, split_title};
+use crate::title::{credit_alternatives, normalize, record_key, split_title};
 
 pub const MISS_TTL_SECONDS: f64 = 3600.0;
 pub const DURATION_TOLERANCE_SECONDS: f64 = 5.0;
@@ -210,16 +210,55 @@ impl LyricsLookup {
         let Some(_guard) = self.begin_lookup(&key) else {
             return Ok(LookupOutcome::Pending);
         };
-        self.lookup_query(&key, &base, track, now).await
+
+        let mut first_error = None;
+        match self.find_item(&base, track).await {
+            Ok(Some(item)) => {
+                return Ok(LookupOutcome::Found(Box::new(record_from(
+                    &item, track, now,
+                ))));
+            }
+            Ok(None) => {}
+            Err(error) => first_error = Some(error),
+        }
+
+        // A YouTube title can carry the performer while the channel name is unrelated, so a
+        // direct query for the raw metadata finds nothing. Only in that case, retry with the
+        // credit inside the title and store the result under that cleaner metadata.
+        for (artist, title) in credit_alternatives(&track.title, &track.artist) {
+            let Some(base) = LookupQuery::new(&title, &artist, &track.album, track.duration) else {
+                continue;
+            };
+            let mut variant = track.clone();
+            variant.title = title;
+            variant.artist = artist;
+            match self.find_item(&base, &variant).await {
+                Ok(Some(item)) => {
+                    return Ok(LookupOutcome::Found(Box::new(record_from(
+                        &item, &variant, now,
+                    ))));
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+
+        // A partial or total network failure must not become an hour-long miss.
+        if let Some(error) = first_error {
+            return Err(error);
+        }
+
+        self.remember_miss(key, now);
+        Ok(LookupOutcome::Missing { fetched_at: now })
     }
 
-    async fn lookup_query(
+    async fn find_item(
         &self,
-        key: &str,
         base: &LookupQuery,
         track: &TrackQuery,
-        now: f64,
-    ) -> Result<LookupOutcome, LyricsError> {
+    ) -> Result<Option<LrclibTrack>, LyricsError> {
         let without_album = base.without_album();
         let duration = track
             .duration
@@ -262,9 +301,7 @@ impl LyricsLookup {
         }
 
         if let Some(item) = select(&exact, &searched, duration) {
-            return Ok(LookupOutcome::Found(Box::new(record_from(
-                item, track, now,
-            ))));
+            return Ok(Some(item.clone()));
         }
 
         // A partial or total network failure must not become an hour-long miss.
@@ -272,8 +309,7 @@ impl LyricsLookup {
             return Err(error);
         }
 
-        self.remember_miss(key.to_owned(), now);
-        Ok(LookupOutcome::Missing { fetched_at: now })
+        Ok(None)
     }
 
     fn begin_lookup<'a>(&'a self, key: &str) -> Option<InFlightGuard<'a>> {
@@ -428,6 +464,15 @@ fn select<'a>(
     searched: &'a [LrclibTrack],
     duration: Option<f64>,
 ) -> Option<&'a LrclibTrack> {
+    // A fallback query can match a live or extended cut exactly; prefer the one whose length
+    // also fits the track that is playing.
+    if let Some(item) = exact
+        .iter()
+        .find(|item| item.has_synced() && near(item, duration))
+    {
+        return Some(item);
+    }
+
     if let Some(item) = exact.iter().find(|item| item.has_synced()) {
         return Some(item);
     }
@@ -628,6 +673,24 @@ mod tests {
             Some(1)
         );
         assert_eq!(client.search_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn prefers_an_exact_match_that_also_fits_the_duration() {
+        let far = track(1, "Song", "Artist", 300.0, Some("[00:01.00]Far\n"), None);
+        let near = track(2, "Song", "Artist", 181.0, Some("[00:01.00]Near\n"), None);
+        let client = FakeClient::new(vec![Ok(vec![far, near])], vec![]);
+        let lookup = LyricsLookup::new(client);
+
+        let outcome = lookup
+            .lookup_at(&track_query(180.0), 1000.0)
+            .await
+            .expect("lookup works");
+
+        let LookupOutcome::Found(record) = outcome else {
+            panic!("expected lyrics");
+        };
+        assert_eq!(record.text, "[00:01.00]Near\n");
     }
 
     #[tokio::test]
@@ -952,6 +1015,156 @@ mod tests {
         assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1000.0 });
         assert_eq!(client.get_count(), 0);
         assert_eq!(client.search_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn retries_with_a_decorated_credit_when_the_channel_is_unrelated() {
+        let found = track(
+            9,
+            "Feraline",
+            "Combichrist",
+            312.0,
+            Some("[00:01.00]Line\n"),
+            None,
+        );
+        let client = FakeClient::new(vec![Ok(vec![]), Ok(vec![found])], vec![Ok(vec![])]);
+        let lookup = LyricsLookup::new(client.clone());
+        let video = TrackQuery::new(
+            "Combichrist - Feraline (Official Lyric Video)",
+            "Out Of Line Music",
+            "",
+            Some(313.0),
+        );
+
+        let outcome = lookup
+            .lookup_at(&video, 1000.0)
+            .await
+            .expect("lookup works");
+        let LookupOutcome::Found(record) = outcome else {
+            panic!("expected the credit fallback to find lyrics");
+        };
+        assert_eq!(record.title, "Feraline");
+        assert_eq!(record.artist, "Combichrist");
+        assert_eq!(record.key, record_key("Feraline", "Combichrist"));
+
+        let queries = client.get_queries.lock().expect("get queries");
+        assert_eq!(queries.len(), 2);
+        assert_eq!(queries[1].title, "Feraline");
+        assert_eq!(queries[1].artist, "Combichrist");
+    }
+
+    #[tokio::test]
+    async fn retries_with_a_plain_credit_when_the_channel_is_unrelated() {
+        let found = track(
+            10,
+            "Party Time",
+            "The Northern Boys",
+            182.0,
+            Some("[00:01.00]Line\n"),
+            None,
+        );
+        let client = FakeClient::new(vec![Ok(vec![]), Ok(vec![found])], vec![Ok(vec![])]);
+        let lookup = LyricsLookup::new(client.clone());
+        let video = TrackQuery::new(
+            "The Northern Boys - Party Time",
+            "Sindhu World",
+            "",
+            Some(182.0),
+        );
+
+        let outcome = lookup
+            .lookup_at(&video, 1000.0)
+            .await
+            .expect("lookup works");
+        let LookupOutcome::Found(record) = outcome else {
+            panic!("expected the plain credit fallback to find lyrics");
+        };
+        assert_eq!(record.title, "Party Time");
+        assert_eq!(record.artist, "The Northern Boys");
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_with_a_version_word_as_the_title() {
+        let client = FakeClient::new(vec![Ok(vec![])], vec![Ok(vec![])]);
+        let lookup = LyricsLookup::new(client.clone());
+        let track = TrackQuery::new("Song - Live", "Someone Else", "", Some(200.0));
+
+        let outcome = lookup
+            .lookup_at(&track, 1000.0)
+            .await
+            .expect("lookup works");
+
+        assert_eq!(outcome, LookupOutcome::Missing { fetched_at: 1000.0 });
+        assert_eq!(client.get_count(), 1);
+        assert_eq!(client.search_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_failed_fallback_is_reported_and_not_cached_as_a_miss() {
+        let client = FakeClient::new(
+            vec![
+                Err(LyricsError::Request("down".to_owned())),
+                Err(LyricsError::Request("down".to_owned())),
+            ],
+            vec![Err(LyricsError::Request("down".to_owned()))],
+        );
+        let lookup = LyricsLookup::new(client.clone());
+        let video = TrackQuery::new(
+            "Combichrist - Feraline (Official Lyric Video)",
+            "Out Of Line Music",
+            "",
+            Some(313.0),
+        );
+
+        let error = lookup
+            .lookup_at(&video, 1000.0)
+            .await
+            .expect_err("a network failure is reported");
+        assert!(matches!(error, LyricsError::Request(_)));
+
+        let before = client.get_count() + client.search_count();
+        let _ = lookup.lookup_at(&video, 2000.0).await;
+        assert!(
+            client.get_count() + client.search_count() > before,
+            "a failure must not be cached as a miss"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_fallback_can_recover_from_a_failed_strict_lookup() {
+        let found = track(
+            9,
+            "Feraline",
+            "Combichrist",
+            312.0,
+            Some("[00:01.00]Line\n"),
+            None,
+        );
+        let client = FakeClient::new(
+            vec![
+                Err(LyricsError::Request("down".to_owned())),
+                Ok(vec![found]),
+            ],
+            vec![Err(LyricsError::Request("down".to_owned()))],
+        );
+        let lookup = LyricsLookup::new(client);
+        let video = TrackQuery::new(
+            "Combichrist - Feraline (Official Lyric Video)",
+            "Out Of Line Music",
+            "",
+            Some(313.0),
+        );
+
+        let outcome = lookup
+            .lookup_at(&video, 1000.0)
+            .await
+            .expect("the fallback succeeds");
+
+        let LookupOutcome::Found(record) = outcome else {
+            panic!("expected the fallback to recover");
+        };
+        assert_eq!(record.title, "Feraline");
+        assert_eq!(record.artist, "Combichrist");
     }
 
     #[tokio::test]

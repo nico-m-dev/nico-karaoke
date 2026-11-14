@@ -10,10 +10,13 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 
 - Create lyrics when a track's lookup found nothing: the Library now offers **New lyrics** and
   a card for the current track, opening an unsaved Studio document bound to that track.
-- Recognise a decorated video credit such as `Artist - Song (Official Video)` when matching a
-  playing track to saved lyrics, so one song keeps one library record across YouTube and
-  YouTube Music. A clearly different length still starts a separate record when both sides
-  know it; existing duplicates are not merged.
+- Recognise a credit inside a video title such as `Artist - Song` or
+  `Artist - Song (Official Video)` when matching a playing track to saved lyrics, so one song
+  keeps one library record across YouTube and YouTube Music. The library keeps one record per
+  artist and title; existing duplicates are not merged.
+- Retry the lyrics lookup with the performer read from the title when the normal query finds
+  nothing, so videos from label or re-upload channels such as Out Of Line Music or Sindhu
+  World find their LRCLIB entry.
 
 ## [1.0.0] - 2026-11-13
 

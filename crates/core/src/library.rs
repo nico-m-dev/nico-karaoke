@@ -7,7 +7,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::lyrics::{LyricLine, parse_lrc};
-use crate::title::{decorated_credit, normalize, record_key, slugify, split_title};
+use crate::title::{credit_alternatives, normalize, record_key, slugify, split_title};
 
 pub const LIBRARY_VERSION: u32 = 1;
 pub const LIBRARY_DIR_NAME: &str = "library";
@@ -238,10 +238,15 @@ impl Library {
         self.read_state().records.get(key).cloned()
     }
 
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.read_state().records.contains_key(key)
+    }
+
     /// Find the record that belongs to a track snapshot. YouTube metadata can omit the
     /// artist, add a channel/video decoration, or hide the performer behind a label channel,
     /// so the exact key is followed by a normalised title match and, when that finds nothing,
-    /// a decorated-credit match. Duration breaks ties between covers of the same title.
+    /// a credit inside the title such as `Artist - Song`. Duration breaks ties between covers
+    /// of the same title.
     pub fn find_key(&self, title: &str, artist: &str, duration: Option<f64>) -> Option<String> {
         let exact = record_key(title, artist);
         let state = self.read_state();
@@ -629,17 +634,17 @@ fn duration_unknown_or_agrees(stored: Option<f64>, target: Option<f64>) -> bool 
 }
 
 /// Both readings of a metadata pair as `(cleaned artist, normalised title)`: the conservative
-/// split and, for a decorated video title, the credit hidden behind a label or channel name.
+/// split and any credit inside the title.
 fn credit_pairs(raw_title: &str, raw_artist: &str) -> Vec<(String, String)> {
     let (title, artist) = split_title(raw_title, raw_artist);
     let mut pairs = vec![(artist, normalize(&title))];
-    if let Some((credit_artist, credit_title)) = decorated_credit(raw_title) {
-        let pair = (credit_artist, normalize(&credit_title));
-        let known = pairs
-            .iter()
-            .any(|(artist, title)| normalize(artist) == normalize(&pair.0) && *title == pair.1);
-        if !pair.0.trim().is_empty() && !pair.1.is_empty() && !known {
-            pairs.push(pair);
+    for (credit_artist, credit_title) in credit_alternatives(raw_title, raw_artist) {
+        let title = normalize(&credit_title);
+        let known = pairs.iter().any(|(artist, known_title)| {
+            normalize(artist) == normalize(&credit_artist) && *known_title == title
+        });
+        if !credit_artist.trim().is_empty() && !title.is_empty() && !known {
+            pairs.push((credit_artist, title));
         }
     }
     pairs

@@ -79,6 +79,22 @@ struct MatchCache {
     key: String,
 }
 
+/// A key resolved by a lookup fallback for one exact snapshot. Unlike `MatchCache`, this
+/// survives revision bumps: saving an offset or editing the record must not make the player
+/// forget which record belongs to the track on screen.
+struct PinnedMatch {
+    title: String,
+    artist: String,
+    duration: Option<u64>,
+    key: String,
+}
+
+fn duration_ms(duration: Option<f64>) -> Option<u64> {
+    duration
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| (value * 1000.0).round() as u64)
+}
+
 pub struct NewLibraryItem {
     pub title: String,
     pub artist: String,
@@ -99,6 +115,7 @@ pub struct Watcher {
     cooldown: Mutex<Option<Cooldown>>,
     ensure_lock: Mutex<()>,
     match_cache: Mutex<Option<MatchCache>>,
+    pinned_match: Mutex<Option<PinnedMatch>>,
     media_error_at: Mutex<Option<Instant>>,
     /// Deleted keys with the revision at which they disappeared. An in-flight lookup that
     /// started before that revision must not resurrect the record.
@@ -125,6 +142,7 @@ impl Watcher {
             cooldown: Mutex::new(None),
             ensure_lock: Mutex::new(()),
             match_cache: Mutex::new(None),
+            pinned_match: Mutex::new(None),
             media_error_at: Mutex::new(None),
             deleted: Mutex::new(HashMap::new()),
             revision: AtomicU64::new(0),
@@ -228,9 +246,23 @@ impl Watcher {
     /// the artist or adds video decorations.
     fn matched_key(&self, title: &str, artist: &str, duration: Option<f64>) -> String {
         let revision = self.revision.load(Ordering::SeqCst);
-        let duration = duration
-            .filter(|value| value.is_finite() && *value > 0.0)
-            .map(|value| (value * 1000.0).round() as u64);
+        let duration = duration_ms(duration);
+
+        {
+            let pinned = self
+                .pinned_match
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(pin) = pinned.as_ref() {
+                if pin.title == title
+                    && pin.artist == artist
+                    && pin.duration == duration
+                    && self.library.contains_key(&pin.key)
+                {
+                    return pin.key.clone();
+                }
+            }
+        }
 
         {
             let cache = self
@@ -263,6 +295,40 @@ impl Watcher {
             key: key.clone(),
         });
         key
+    }
+
+    /// Pin the resolved key for one snapshot. A fallback lookup can store a record whose length
+    /// differs from the playing video, which the normal matcher would not re-derive.
+    fn pin_match(&self, title: &str, artist: &str, duration: Option<f64>, key: String) {
+        *self
+            .pinned_match
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(PinnedMatch {
+            title: title.to_owned(),
+            artist: artist.to_owned(),
+            duration: duration_ms(duration),
+            key,
+        });
+    }
+
+    /// Show the record matching a snapshot, or mark it missing under the key the matcher would
+    /// use now.
+    fn show_current_or_missing(
+        &self,
+        generation: u64,
+        title: &str,
+        artist: &str,
+        duration: Option<f64>,
+    ) {
+        let key = self.matched_key(title, artist, duration);
+        let view = match self.library.get(&key) {
+            Some(record) => LyricsView::Found(Box::new(record)),
+            None => LyricsView::Missing {
+                key,
+                fetched_at: unix_now(),
+            },
+        };
+        self.set_lyrics(generation, view);
     }
 
     pub async fn choose_player(self: &Arc<Self>, player: &str) -> bool {
@@ -429,6 +495,10 @@ impl Watcher {
     }
 
     pub async fn delete_library_item(self: &Arc<Self>, key: &str) -> Result<bool, WatcherError> {
+        // The match can change once the record is gone, because a fallback key is derived from
+        // the snapshot. Remember whether this record was the current one before deleting it.
+        let was_current = self.is_current_key(key);
+        let generation = self.state().media.generation;
         let library = self.library.clone();
         let key_owned = key.to_owned();
         let removed = tokio::task::spawn_blocking(move || library.delete(&key_owned))
@@ -441,15 +511,27 @@ impl Watcher {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .insert(key.to_owned(), self.revision.load(Ordering::SeqCst));
-            if self.is_current_key(key) {
-                let generation = self.state().media.generation;
-                self.set_lyrics(
-                    generation,
-                    LyricsView::Missing {
-                        key: key.to_owned(),
-                        fetched_at: unix_now(),
-                    },
-                );
+            {
+                let mut pinned = self
+                    .pinned_match
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if pinned.as_ref().is_some_and(|pin| pin.key == key) {
+                    *pinned = None;
+                }
+            }
+            if was_current {
+                let state = self.state();
+                if state.media.generation == generation {
+                    if let Some(snapshot) = state.media.snapshot.as_ref() {
+                        self.show_current_or_missing(
+                            state.media.generation,
+                            &snapshot.title,
+                            &snapshot.artist,
+                            snapshot.length,
+                        );
+                    }
+                }
             }
         }
         Ok(removed)
@@ -671,24 +753,41 @@ impl Watcher {
                 Ok(LookupOutcome::Found(record)) => {
                     let record = *record;
                     // A delete after this lookup started must not be undone by fetched lyrics.
-                    if watcher.deleted_after(&key, revision) {
+                    // The lookup can finish under a cleaner key than the raw track metadata,
+                    // so a tombstone for either key wins.
+                    if watcher.deleted_after(&key, revision)
+                        || watcher.deleted_after(&record.key, revision)
+                    {
                         watcher.clear_in_flight(generation, revision);
+                        watcher.show_current_or_missing(
+                            generation,
+                            &track.title,
+                            &track.artist,
+                            track.duration,
+                        );
                         return;
                     }
-                    // A save while the lookup was running wins over the fetched text. This is
-                    // scoped to this track's key, so saving an unrelated song no longer throws
-                    // the lookup away.
-                    if let Some(existing) = library.get(&key) {
-                        watcher.set_lyrics(generation, LyricsView::Found(Box::new(existing)));
+                    // A save while the lookup was running, or a record under an artist variant,
+                    // wins over the fetched text.
+                    let existing = library
+                        .get(&key)
+                        .or_else(|| library.get(&record.key))
+                        .or_else(|| {
+                            library
+                                .find_key(&record.title, &record.artist, record.duration)
+                                .and_then(|key| library.get(&key))
+                        });
+                    let final_record = if let Some(existing) = existing {
+                        watcher.bump_revision();
+                        existing
                     } else {
-                        if watcher.deleted_after(&key, revision) {
-                            watcher.clear_in_flight(generation, revision);
-                            return;
-                        }
                         let to_save = record.clone();
                         let saved = tokio::task::spawn_blocking(move || library.put(to_save)).await;
-                        let final_record = match saved {
-                            Ok(Ok(saved)) => saved,
+                        match saved {
+                            Ok(Ok(saved)) => {
+                                watcher.bump_revision();
+                                saved
+                            }
                             Ok(Err(error)) => {
                                 tracing::warn!(error = %error, "could not save fetched lyrics");
                                 record
@@ -697,9 +796,17 @@ impl Watcher {
                                 tracing::warn!(error = %error, "library save task failed");
                                 record
                             }
-                        };
-                        watcher.set_lyrics(generation, LyricsView::Found(Box::new(final_record)));
-                    }
+                        }
+                    };
+                    // Pin the resolved key for this snapshot, because the stored record can
+                    // carry a different duration than the playing video.
+                    watcher.pin_match(
+                        &track.title,
+                        &track.artist,
+                        track.duration,
+                        final_record.key.clone(),
+                    );
+                    watcher.set_lyrics(generation, LyricsView::Found(Box::new(final_record)));
                 }
                 Ok(LookupOutcome::Missing { fetched_at }) => {
                     watcher.set_lyrics(

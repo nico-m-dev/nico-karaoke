@@ -19,13 +19,19 @@ use tower::ServiceExt;
 
 struct FakeLyrics {
     responses: Mutex<VecDeque<Result<Vec<LrclibTrack>, LyricsError>>>,
+    calls: Mutex<usize>,
 }
 
 impl FakeLyrics {
     fn new(responses: Vec<Result<Vec<LrclibTrack>, LyricsError>>) -> Self {
         Self {
             responses: Mutex::new(responses.into()),
+            calls: Mutex::new(0),
         }
+    }
+
+    fn calls(&self) -> usize {
+        *self.calls.lock().expect("calls")
     }
 }
 
@@ -35,6 +41,7 @@ impl LyricsClient for FakeLyrics {
         &self,
         _query: &nico_karaoke_core::LookupQuery,
     ) -> Result<Vec<LrclibTrack>, LyricsError> {
+        *self.calls.lock().expect("calls") += 1;
         self.responses
             .lock()
             .expect("responses")
@@ -46,6 +53,7 @@ impl LyricsClient for FakeLyrics {
         &self,
         _query: &nico_karaoke_core::LookupQuery,
     ) -> Result<Vec<LrclibTrack>, LyricsError> {
+        *self.calls.lock().expect("calls") += 1;
         self.responses
             .lock()
             .expect("responses")
@@ -300,6 +308,266 @@ async fn background_lookup_saves_found_lyrics() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["lyrics"]["state"], "found");
     assert_eq!(body["lyrics"]["lines"][0]["text"], "Fetched line");
+}
+
+#[tokio::test]
+async fn background_lookup_retries_with_the_credit_and_saves_clean_metadata() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let client = Arc::new(FakeLyrics::new(vec![
+        Ok(Vec::new()),
+        Ok(Vec::new()),
+        Ok(vec![lrclib_track(
+            11,
+            "Party Time",
+            "The Northern Boys",
+            "[00:01.00]Fetched line\n",
+        )]),
+    ]));
+    let provider = Arc::new(FakeMediaProvider::new(vec![snapshot(
+        "player",
+        "The Northern Boys - Party Time",
+        "Sindhu World",
+    )]));
+    let watcher = Arc::new(Watcher::new(
+        provider,
+        Arc::new(LyricsLookup::new(client.clone())),
+        library.clone(),
+    ));
+
+    watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(watcher.state().lyrics, LyricsView::Found(_)) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("fallback lookup finishes");
+
+    let clean = record_key("Party Time", "The Northern Boys");
+    let raw = record_key("The Northern Boys - Party Time", "Sindhu World");
+    assert!(library.get(&clean).is_some(), "clean metadata is stored");
+    assert!(
+        library.get(&raw).is_none(),
+        "raw video metadata is not stored"
+    );
+    let calls = client.calls();
+
+    // The cached raw key must not trigger another lookup now that the clean record exists.
+    watcher.tick().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        client.calls(),
+        calls,
+        "a saved record stops further lookups"
+    );
+    assert!(matches!(watcher.state().lyrics, LyricsView::Found(_)));
+}
+
+#[tokio::test]
+async fn a_fallback_match_with_a_different_length_does_not_repeat_the_lookup() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let clean = record_key("Party Time", "The Northern Boys");
+    let mut existing = LyricRecord::new(
+        clean.clone(),
+        "Party Time",
+        "The Northern Boys",
+        "[00:01.00]Library line\n",
+    );
+    existing.duration = Some(165.0);
+    library.put(existing).expect("record saves");
+
+    let client = Arc::new(FakeLyrics::new(vec![
+        Ok(Vec::new()),
+        Ok(Vec::new()),
+        Ok(vec![lrclib_track(
+            11,
+            "Party Time",
+            "The Northern Boys",
+            "[00:01.00]Fetched line\n",
+        )]),
+    ]));
+    let provider = Arc::new(FakeMediaProvider::new(vec![snapshot(
+        "player",
+        "The Northern Boys - Party Time",
+        "Sindhu World",
+    )]));
+    let watcher = Arc::new(Watcher::new(
+        provider,
+        Arc::new(LyricsLookup::new(client.clone())),
+        library.clone(),
+    ));
+
+    watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(watcher.state().lyrics, LyricsView::Found(_)) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("fallback lookup finishes");
+
+    let calls = client.calls();
+    assert!(watcher.is_current_key(&clean));
+    watcher.tick().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    watcher.tick().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        client.calls(),
+        calls,
+        "a pinned match must stop new lookups"
+    );
+    assert_eq!(library.len(), 1);
+    let LyricsView::Found(record) = watcher.state().lyrics else {
+        panic!("the library record should stay visible");
+    };
+    assert_eq!(record.key, clean);
+
+    // An offset save bumps the revision; the pin must survive so the record stays current.
+    let saved = watcher
+        .set_offset(0.5, None)
+        .await
+        .expect("offset applies to the pinned record");
+    assert_eq!(saved.offset, 0.5);
+    let LyricsView::Found(view) = watcher.state().lyrics else {
+        panic!("the view should still show the record");
+    };
+    assert_eq!(view.offset, 0.5);
+    assert!(watcher.is_current_key(&clean));
+    assert_eq!(
+        client.calls(),
+        calls,
+        "saving an offset must not trigger another lookup"
+    );
+}
+
+#[tokio::test]
+async fn background_fallback_reuses_an_artist_variant_record() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let existing_key = record_key("Year Zero", "Ghost B.C.");
+    let mut existing = LyricRecord::new(
+        existing_key.clone(),
+        "Year Zero",
+        "Ghost B.C.",
+        "[00:01.00]Library line\n",
+    );
+    existing.duration = Some(350.0);
+    library.put(existing).expect("record saves");
+
+    let client = Arc::new(FakeLyrics::new(vec![
+        Ok(Vec::new()),
+        Ok(Vec::new()),
+        Ok(vec![lrclib_track(
+            12,
+            "Year Zero",
+            "Ghost",
+            "[00:01.00]Fetched line\n",
+        )]),
+    ]));
+    let mut playing = snapshot(
+        "player",
+        "Ghost - Year Zero (Official Video)",
+        "Some Channel",
+    );
+    playing.length = Some(350.0);
+    let provider = Arc::new(FakeMediaProvider::new(vec![playing]));
+    let watcher = Arc::new(Watcher::new(
+        provider,
+        Arc::new(LyricsLookup::new(client.clone())),
+        library.clone(),
+    ));
+
+    watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(watcher.state().lyrics, LyricsView::Found(_)) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("fallback lookup finishes");
+
+    assert_eq!(library.len(), 1, "the variant record is reused");
+    let LyricsView::Found(record) = watcher.state().lyrics else {
+        panic!("the library record should be visible");
+    };
+    assert_eq!(record.key, existing_key);
+    assert!(watcher.is_current_key(&existing_key));
+
+    let calls = client.calls();
+    watcher.tick().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        client.calls(),
+        calls,
+        "the pinned variant stops new lookups"
+    );
+}
+
+#[tokio::test]
+async fn deleting_the_clean_record_makes_the_video_missing_without_reloading() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let library = Arc::new(Library::open(temp.path()).expect("library opens"));
+    let client = Arc::new(FakeLyrics::new(vec![
+        Ok(Vec::new()),
+        Ok(Vec::new()),
+        Ok(vec![lrclib_track(
+            11,
+            "Party Time",
+            "The Northern Boys",
+            "[00:01.00]Fetched line\n",
+        )]),
+    ]));
+    let provider = Arc::new(FakeMediaProvider::new(vec![snapshot(
+        "player",
+        "The Northern Boys - Party Time",
+        "Sindhu World",
+    )]));
+    let watcher = Arc::new(Watcher::new(
+        provider,
+        Arc::new(LyricsLookup::new(client.clone())),
+        library.clone(),
+    ));
+
+    watcher.tick().await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if matches!(watcher.state().lyrics, LyricsView::Found(_)) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("fallback lookup finishes");
+
+    let clean = record_key("Party Time", "The Northern Boys");
+    let calls = client.calls();
+    assert!(
+        watcher
+            .delete_library_item(&clean)
+            .await
+            .expect("record deletes")
+    );
+
+    assert!(matches!(watcher.state().lyrics, LyricsView::Missing { .. }));
+    assert!(library.get(&clean).is_none());
+
+    watcher.tick().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(client.calls(), calls, "a deleted record must not reload");
+    assert!(library.get(&clean).is_none());
 }
 
 #[tokio::test]

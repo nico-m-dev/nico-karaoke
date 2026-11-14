@@ -53,14 +53,20 @@ a public release.
 ## Matching one song across providers
 
 - Library tests cover a clean record found from a decorated video credit and the reverse. A
-  word-level table pins the artist variants (`Ghost` matches `Ghost B.C.` but not
-  `Ghostemane`). Rejections cover a plain dash title without a decoration, a clearly different
-  length, a channel variant without a known duration, and two candidates that fit the same
-  credit.
+  title-level table covers the one-character guard, and a word-level table pins the artist
+  variants (`Ghost` matches `Ghost B.C.` but not `Ghostemane`). Rejections cover a dash title
+  ending in a version word, a clearly different length, a channel variant without a known
+  duration, and two candidates that fit the same credit.
+- Lookup tests cover the retry with a decorated credit and with a plain `Artist - Song` title,
+  reject a version word (`Song - Live`) as a title, and confirm that a background fallback
+  stores the clean metadata and does not trigger a second lookup. A record whose length differs
+  by more than the match tolerance stays pinned, survives an offset save as the current record,
+  and an artist-variant record is reused instead of duplicated.
 - An API test confirms that applying a fetch for a decorated video credit updates the existing
-  record instead of creating a second one.
-- Still to check on a live player: a real YouTube/YouTube Music pair resolving to one record,
-  including the current-item badge and the Studio round-trip.
+  record instead of creating a second one, and that deleting the clean record leaves the video
+  missing without reloading it.
+- Still to check on a live player: a real YouTube video from a label or re-upload channel with
+  an empty library, including the current-item badge and the Studio round-trip.
 
 ## Creating lyrics without a lookup
 
