@@ -75,6 +75,10 @@ Do not add a dependency, framework, or build tool without agreeing on it first.
 - A player without position or seek support still gets readable lyrics and a usable Studio.
 - Destructive actions need explicit confirmation in the UI.
 - Public sharing or publishing of lyrics is always opt-in and confirmed.
+- Publishing to LRCLIB is a dedicated advanced flow, never a button in normal editing. Ordinary
+  edits and saves stay local; a contribution is explicit, previewed, and confirmed.
+- Word-level synchronisation is an opt-in advanced mode. Line-level lyrics and editing remain
+  the default and never depend on word data.
 - The player view stays deliberately quiet: playback, library, Studio, fullscreen. Editing
   belongs in the Studio.
 

@@ -339,6 +339,10 @@ switches live there.
 - Legacy `[end:]` tags are converted to `♪` markers on open where there is a real gap; they
   are only removed from disk when you save.
 
+Editing stays line-based, and the Studio has no publish button. Word-level timing and a future
+LRCLIB contribution flow are advanced ideas for people who deliberately polish lyrics; they
+are not part of the everyday workflow and would live in a separate section.
+
 | Input | Action |
 | --- | --- |
 | `Ctrl`/`Cmd` + `S` | save |

@@ -3,7 +3,7 @@
 Future work and open decisions. Product behaviour, architecture, and settled decisions live in
 `README.md` and `AGENTS.md`; test evidence lives in `docs/testing.md`.
 
-Updated: 2026-11-13.
+Updated: 2026-11-14.
 
 ## After 1.0.0
 
@@ -42,27 +42,43 @@ Updated: 2026-11-13.
 - Browser end-to-end tests for idle, playing, library, Studio, and save flows.
 - A repeatable 60 fps budget check for very long songs and long lines.
 - Community translation workflow: document adding a catalog and registering a language.
-- Word-level synchronisation and the Studio word editor (see below).
 - Optional local-only remote control from a phone, only after an explicit security design.
 
-## Later product ideas
+## Advanced authoring (later)
+
+The everyday workflow stays line-based, local, and simple. The ideas below are for people who
+deliberately polish lyrics; they must sit in a clearly separated, opt-in place, never as an
+extra button in normal playback or saving.
 
 ### Word-level synchronisation
 
 - Read LRCLIB word-sync data in addition to line-synced lyrics.
 - Store an optional word list per line and render each word with its own fill.
 - Add a Studio word mode: split, distribute, tap, and nudge words for one line.
-- Keep line-level lyrics as the fallback; word data is never required.
-- Treat the word editor as a separate, serious phase.
+- Keep line-level lyrics as the default; playback, saving, and the normal Studio never require
+  word data.
+- Put the word editor behind an explicit advanced mode, not in the everyday editing flow.
+- Treat the word editor as a separate, serious phase with its own acceptance criteria.
 
 ### Share lyrics with LRCLIB
 
+Publishing is not a one-click action and not a feature for incidental listeners. A casual
+upload of half-finished or mistimed text is not a gift to LRCLIB; it adds work for its
+maintainers. Any future contribution flow therefore belongs in a dedicated advanced section
+for users who take their saved lyrics seriously.
+
 - Show whether an item came from LRCLIB, is local-only, or was shared before.
-- Add an explicit confirmation flow with exact metadata and text.
+- Offer a **report incorrect lyrics** action before offering a duplicate upload, and check
+  whether LRCLIB already has an entry for the song.
+- Add an explicit confirmation flow with the exact metadata, text, and a diff against the
+  existing LRCLIB entry.
+- Require the user to review the exact payload and state that it is accurate; consider
+  requiring line-synced lyrics for upload.
 - Solve LRCLIB's proof-of-work challenge in the background with progress.
 - Publish only after confirmation; handle rate limits and failures cleanly.
-- Add a report action for incorrect existing lyrics.
-- Never publish automatically and never use real user lyrics in tests.
+- Keep the normal app upload-free: nothing leaves the machine unless the user deliberately
+  enters this flow.
+- Never publish automatically, never bulk-upload, and never use real user lyrics in tests.
 
 ### Other
 
