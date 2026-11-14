@@ -527,11 +527,22 @@ impl Watcher {
         self: &Arc<Self>,
         mut record: LyricRecord,
     ) -> Result<LyricRecord, WatcherError> {
-        if let Some(existing) = self.library.get(&record.key) {
+        // A fetch for a video can carry a different title and channel than the record the
+        // library already keeps for the same song. Reuse that record instead of adding a
+        // duplicate under a second key. The fetched record carries the query metadata, so an
+        // item opened by key still resolves back to itself.
+        if let Some(existing) = self
+            .library
+            .find_key(&record.title, &record.artist, record.duration)
+            .and_then(|key| self.library.get(&key))
+        {
             // Keep the first stored original; a later fetch must not replace it.
             if existing.original.is_some() {
                 record.original = existing.original;
             }
+            record.key = existing.key;
+            record.title = existing.title;
+            record.artist = existing.artist;
             record.offset = existing.offset;
             if record.album.trim().is_empty() {
                 record.album = existing.album;

@@ -23,6 +23,14 @@ static CHANNEL_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
 static TITLE_SEPARATOR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(.+?)\s+[-–—]\s+(.+)$").expect("title separator regex is valid")
 });
+/// A right-hand side that names a version, not a song. Parenthetical versions stay apart
+/// through normalisation instead of this list.
+static VERSION_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^(?:live|remix|rmx|acoustic|instrumental|demo|edit|version|extended|reprise|cover|nightcore|slowed|sped\s*up|karaoke|remaster(?:ed)?)$",
+    )
+    .expect("version suffix regex is valid")
+});
 
 /// Remove common video/channel decorations from a title.
 pub fn clean(text: &str) -> String {
@@ -36,6 +44,26 @@ pub fn clean(text: &str) -> String {
 /// Remove a trailing `- Topic` or `VEVO` suffix from an artist/channel name.
 pub fn strip_channel(artist: &str) -> String {
     CHANNEL_SUFFIX.replace(artist, "").trim().to_owned()
+}
+
+/// The artist and title hidden in a decorated video title such as
+/// `Artist - Song (Official Video)`. Only titles with a video/lyric decoration or a featured
+/// artist qualify: without one, `Song - Live` is far more likely the whole title than a credit.
+pub(crate) fn decorated_credit(title: &str) -> Option<(String, String)> {
+    let decorated =
+        DECORATION.is_match(title) || FEAT_PARENTHESIS.is_match(title) || FEAT_TAIL.is_match(title);
+    if !decorated {
+        return None;
+    }
+
+    let cleaned = clean(title);
+    let captures = TITLE_SEPARATOR.captures(&cleaned)?;
+    let left = captures.get(1)?.as_str().trim();
+    let right = captures.get(2)?.as_str().trim();
+    if left.is_empty() || right.is_empty() || VERSION_SUFFIX.is_match(right) {
+        return None;
+    }
+    Some((left.to_owned(), right.to_owned()))
 }
 
 /// Normalise text for comparisons and record keys. Accents are folded, punctuation and case
@@ -134,6 +162,21 @@ mod tests {
         assert_eq!(strip_channel("Artist - Topic"), "Artist");
         assert_eq!(strip_channel("Artist VEVO"), "Artist");
         assert_eq!(strip_channel("Artist"), "Artist");
+    }
+
+    #[test]
+    fn recovers_a_credit_from_a_decorated_video_title() {
+        assert_eq!(
+            decorated_credit("Combichrist - Feraline (Official Lyric Video)"),
+            Some(("Combichrist".to_owned(), "Feraline".to_owned()))
+        );
+        assert_eq!(
+            decorated_credit("Ghost B.C. - Year Zero (AUDIO)"),
+            Some(("Ghost B.C.".to_owned(), "Year Zero".to_owned()))
+        );
+        assert_eq!(decorated_credit("Song - Live"), None);
+        assert_eq!(decorated_credit("Song - Live (Official Video)"), None);
+        assert_eq!(decorated_credit("Song"), None);
     }
 
     #[test]

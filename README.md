@@ -295,6 +295,12 @@ When the current track has no saved text, the header offers **New lyrics** and t
 with a card for that track. Both open an unsaved Studio document bound to the current track;
 saving creates the record.
 
+A saved record is matched by cleaned title and artist. A decorated video title such as
+`Artist - Song (Official Video)` from a label channel also counts as the credit inside the
+title, so playing the same song from YouTube and YouTube Music reuses one record instead of
+adding a second. When both sides report a length, a clearly different one keeps a version
+apart. Existing duplicates are not merged automatically; deleting one copy is enough.
+
 Open an item to preview its saved text, open it in the Studio, delete it, or search for it
 on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.
 

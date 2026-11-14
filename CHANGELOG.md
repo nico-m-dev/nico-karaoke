@@ -10,6 +10,10 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 
 - Create lyrics when a track's lookup found nothing: the Library now offers **New lyrics** and
   a card for the current track, opening an unsaved Studio document bound to that track.
+- Recognise a decorated video credit such as `Artist - Song (Official Video)` when matching a
+  playing track to saved lyrics, so one song keeps one library record across YouTube and
+  YouTube Music. A clearly different length still starts a separate record when both sides
+  know it; existing duplicates are not merged.
 
 ## [1.0.0] - 2026-11-13
 

@@ -50,6 +50,18 @@ a public release.
   timed lyrics.
 - Rust parser/serializer tests and the Studio serializer test cover both cases.
 
+## Matching one song across providers
+
+- Library tests cover a clean record found from a decorated video credit and the reverse. A
+  word-level table pins the artist variants (`Ghost` matches `Ghost B.C.` but not
+  `Ghostemane`). Rejections cover a plain dash title without a decoration, a clearly different
+  length, a channel variant without a known duration, and two candidates that fit the same
+  credit.
+- An API test confirms that applying a fetch for a decorated video credit updates the existing
+  record instead of creating a second one.
+- Still to check on a live player: a real YouTube/YouTube Music pair resolving to one record,
+  including the current-item badge and the Studio round-trip.
+
 ## Creating lyrics without a lookup
 
 - Headless Chromium against a stubbed API on 2026-11-14: with a playing track and a `missing`

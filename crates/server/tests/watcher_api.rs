@@ -640,6 +640,78 @@ async fn matches_a_library_record_when_the_provider_omits_the_artist() {
 }
 
 #[tokio::test]
+async fn matches_a_clean_record_from_a_decorated_video_credit() {
+    let fixture = Fixture::new(
+        vec![snapshot(
+            "player",
+            "Combichrist - Feraline (Official Lyric Video)",
+            "Out Of Line Music",
+        )],
+        vec![],
+    );
+    let key = record_key("Feraline", "Combichrist");
+    let mut item = LyricRecord::new(
+        key.clone(),
+        "Feraline",
+        "Combichrist",
+        "[00:01.00]Matched line\n",
+    );
+    item.duration = Some(180.0);
+    fixture.library.put(item).expect("record saves");
+
+    fixture.watcher.tick().await;
+
+    let (status, body) = fixture.request(Method::GET, "/api/now", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["lyrics"]["state"], "found");
+    assert_eq!(body["lyrics"]["record_key"], key);
+    assert_eq!(body["lyrics"]["lines"][0]["text"], "Matched line");
+}
+
+#[tokio::test]
+async fn fetch_apply_reuses_a_record_for_a_decorated_video_credit() {
+    let fixture = Fixture::new(
+        vec![],
+        vec![Ok(vec![lrclib_track(
+            9,
+            "Feraline",
+            "Combichrist",
+            "[00:01.00]Fetched\n",
+        )])],
+    );
+    let key = record_key("Feraline", "Combichrist");
+    let mut item = LyricRecord::new(key.clone(), "Feraline", "Combichrist", "[00:01.00]Manual\n");
+    item.duration = Some(180.0);
+    fixture.library.put(item).expect("record saves");
+
+    let (status, body) = fixture
+        .request(
+            Method::POST,
+            "/api/lyrics/fetch",
+            Some(json!({
+                "title": "Combichrist - Feraline (Official Lyric Video)",
+                "artist": "Out Of Line Music",
+                "length": 180,
+                "apply": true
+            })),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["record_key"], key);
+    assert_eq!(body["source"], "lrclib");
+    assert_eq!(fixture.library.len(), 1);
+
+    let stored = fixture
+        .library
+        .get(&key)
+        .expect("existing record is updated");
+    assert!(stored.text.contains("Fetched"));
+    assert_eq!(stored.title, "Feraline");
+    assert_eq!(stored.artist, "Combichrist");
+}
+
+#[tokio::test]
 async fn a_new_library_item_invalidates_the_track_match_cache() {
     let fixture = Fixture::new(
         vec![snapshot("player", "Late Song", "")],

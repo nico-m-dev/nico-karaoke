@@ -7,7 +7,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::lyrics::{LyricLine, parse_lrc};
-use crate::title::{normalize, record_key, slugify, split_title};
+use crate::title::{decorated_credit, normalize, record_key, slugify, split_title};
 
 pub const LIBRARY_VERSION: u32 = 1;
 pub const LIBRARY_DIR_NAME: &str = "library";
@@ -239,8 +239,9 @@ impl Library {
     }
 
     /// Find the record that belongs to a track snapshot. YouTube metadata can omit the
-    /// artist or add a channel/video decoration that the exact key cannot see, so fall back
-    /// to a normalised title match. Duration breaks ties between covers of the same title.
+    /// artist, add a channel/video decoration, or hide the performer behind a label channel,
+    /// so the exact key is followed by a normalised title match and, when that finds nothing,
+    /// a decorated-credit match. Duration breaks ties between covers of the same title.
     pub fn find_key(&self, title: &str, artist: &str, duration: Option<f64>) -> Option<String> {
         let exact = record_key(title, artist);
         let state = self.read_state();
@@ -268,18 +269,54 @@ impl Library {
         // A title-only match is only safe when the duration agrees. Without an artist,
         // "Home" or "Intro" could be any track with that title.
         let duration = duration.filter(|value| value.is_finite() && *value > 0.0);
-        candidates.retain(|record| {
-            if !artist_key.is_empty() {
-                return true;
-            }
-            durations_agree(record.duration, duration)
-        });
+        let known_artist = !artist_key.is_empty();
+        candidates.retain(|record| known_artist || durations_agree(record.duration, duration));
 
         if candidates.len() == 1 {
-            candidates.first().map(|record| record.key.clone())
-        } else {
-            None
+            return candidates.first().map(|record| record.key.clone());
         }
+        if !candidates.is_empty() {
+            return None;
+        }
+
+        // A decorated video title can hide the performer behind a label or channel name. Compare
+        // both readings so the same song keeps one record across YouTube and YouTube Music.
+        let target_pairs = credit_pairs(title, artist);
+        let mut exact_pairs: Vec<&LyricRecord> = Vec::new();
+        let mut loose_pairs: Vec<&LyricRecord> = Vec::new();
+        for record in state.records.values() {
+            for (record_artist, record_title) in credit_pairs(&record.title, &record.artist) {
+                for (target_artist, target_title) in &target_pairs {
+                    if record_title != *target_title
+                        || record_artist.is_empty()
+                        || target_artist.is_empty()
+                    {
+                        continue;
+                    }
+                    if normalize(&record_artist) == normalize(target_artist) {
+                        if duration_unknown_or_agrees(record.duration, duration) {
+                            push_unique(&mut exact_pairs, record);
+                        }
+                    } else if artists_related(&record_artist, target_artist)
+                        && durations_agree(record.duration, duration)
+                    {
+                        push_unique(&mut loose_pairs, record);
+                    }
+                }
+            }
+        }
+
+        // Two records that both fit the same credit are ambiguous; do not guess.
+        if exact_pairs.len() == 1 {
+            return exact_pairs.first().map(|record| record.key.clone());
+        }
+        if !exact_pairs.is_empty() {
+            return None;
+        }
+        if loose_pairs.len() == 1 {
+            return loose_pairs.first().map(|record| record.key.clone());
+        }
+        None
     }
 
     pub fn summaries(&self) -> Vec<LibrarySummary> {
@@ -582,6 +619,92 @@ fn durations_agree(stored: Option<f64>, target: Option<f64>) -> bool {
     }
 }
 
+/// An exact artist and title pair still needs a length when both sides have one, so a
+/// different cut of the same song stays a separate version.
+fn duration_unknown_or_agrees(stored: Option<f64>, target: Option<f64>) -> bool {
+    match (stored, target) {
+        (Some(stored), Some(target)) => (stored - target).abs() <= MATCH_DURATION_TOLERANCE_SECONDS,
+        _ => true,
+    }
+}
+
+/// Both readings of a metadata pair as `(cleaned artist, normalised title)`: the conservative
+/// split and, for a decorated video title, the credit hidden behind a label or channel name.
+fn credit_pairs(raw_title: &str, raw_artist: &str) -> Vec<(String, String)> {
+    let (title, artist) = split_title(raw_title, raw_artist);
+    let mut pairs = vec![(artist, normalize(&title))];
+    if let Some((credit_artist, credit_title)) = decorated_credit(raw_title) {
+        let pair = (credit_artist, normalize(&credit_title));
+        let known = pairs
+            .iter()
+            .any(|(artist, title)| normalize(artist) == normalize(&pair.0) && *title == pair.1);
+        if !pair.0.trim().is_empty() && !pair.1.is_empty() && !known {
+            pairs.push(pair);
+        }
+    }
+    pairs
+}
+
+/// Artist variants are compared on words: `Ghost B.C.` is a variant of `Ghost`, while
+/// `Ghostemane`, `Queensrÿche`, and `Airbourne` are different names. Extra words may only be
+/// short qualifiers such as initials or a leading article.
+fn artists_related(left: &str, right: &str) -> bool {
+    let left = artist_words(left);
+    let right = artist_words(right);
+    if left.is_empty() || right.is_empty() || left == right {
+        return false;
+    }
+    let (shorter, longer) = if left.len() <= right.len() {
+        (&left, &right)
+    } else {
+        (&right, &left)
+    };
+    if shorter.len() == longer.len() {
+        return false;
+    }
+    let floor: usize = shorter.iter().map(|word| word.chars().count()).sum();
+    if floor < 3 {
+        return false;
+    }
+    shorter.iter().all(|word| longer.contains(word))
+        && longer
+            .iter()
+            .filter(|word| !shorter.contains(word))
+            .all(|word| word.chars().count() <= 3)
+}
+
+fn artist_words(value: &str) -> Vec<String> {
+    value
+        .split(|character: char| !character.is_alphanumeric())
+        .map(normalize)
+        .filter(|word| !word.is_empty())
+        .collect()
+}
+
+#[cfg(test)]
+mod credit_tests {
+    use super::artists_related;
+
+    #[test]
+    fn compares_artist_variants_on_words() {
+        assert!(artists_related("Ghost", "Ghost B.C."));
+        assert!(artists_related("Ghost BC", "Ghost"));
+        assert!(artists_related("The Cure", "Cure"));
+        assert!(!artists_related("Ghost", "Ghostemane"));
+        assert!(!artists_related("Queen", "Queensrÿche"));
+        assert!(!artists_related("Air", "Airbourne"));
+        assert!(!artists_related("Ghost", "Ghost Of A Chance"));
+        assert!(!artists_related("Tyler, The Creator", "Tyler"));
+        assert!(!artists_related("O", "O R"));
+    }
+}
+
+fn push_unique<'a>(items: &mut Vec<&'a LyricRecord>, record: &'a LyricRecord) {
+    if !items.iter().any(|item| item.key == record.key) {
+        items.push(record);
+    }
+}
+
 fn unix_now() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -760,6 +883,149 @@ mod tests {
             library.find_key("Yesterday", "The Beatles", None),
             Some(key)
         );
+    }
+
+    #[test]
+    fn finds_a_clean_record_from_a_decorated_video_credit() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Feraline", "Combichrist");
+        let mut item = record(&key, "Feraline", "Combichrist", "Line\n");
+        item.duration = Some(312.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(
+            library.find_key(
+                "Combichrist - Feraline (Official Lyric Video)",
+                "Out Of Line Music",
+                Some(313.0)
+            ),
+            Some(key.clone())
+        );
+        assert_eq!(
+            library.find_key(
+                "Combichrist - Feraline (Official Lyric Video)",
+                "Out Of Line Music",
+                None
+            ),
+            Some(key)
+        );
+    }
+
+    #[test]
+    fn finds_a_decorated_video_record_from_clean_metadata() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let title = "Combichrist - Feraline (Official Lyric Video)";
+        let artist = "Out Of Line Music";
+        let key = record_key(title, artist);
+        let mut item = record(&key, title, artist, "Line\n");
+        item.duration = Some(313.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(
+            library.find_key("Feraline", "Combichrist", Some(312.0)),
+            Some(key)
+        );
+    }
+
+    #[test]
+    fn does_not_split_a_plain_dash_title_without_a_decoration() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Song - Live", "Someone Else");
+        let mut item = record(&key, "Song - Live", "Someone Else", "Line\n");
+        item.duration = Some(200.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(library.find_key("Live", "Song", Some(200.0)), None);
+    }
+
+    #[test]
+    fn a_short_artist_is_not_a_prefix_of_a_longer_name() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Home", "Ghost");
+        let mut item = record(&key, "Home", "Ghost", "Line\n");
+        item.duration = Some(240.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(library.find_key("Home", "Ghostemane", Some(243.0)), None);
+        assert_eq!(library.find_key("Home", "Queensrÿche", Some(243.0)), None);
+    }
+
+    #[test]
+    fn finds_a_decorated_record_from_a_clean_channel_variant() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let title = "Ghost B.C. - Year Zero (AUDIO)";
+        let artist = "Ghost";
+        let key = record_key(title, artist);
+        let mut item = record(&key, title, artist, "Line\n");
+        item.duration = Some(350.2);
+        library.put(item).expect("record saves");
+
+        assert_eq!(
+            library.find_key("Year Zero", "Ghost", Some(350.0)),
+            Some(key)
+        );
+    }
+
+    #[test]
+    fn does_not_guess_between_two_records_that_fit_the_same_credit() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        for (key, title, artist) in [
+            (record_key("Year Zero", "Ghost"), "Year Zero", "Ghost"),
+            (
+                record_key("Ghost - Year Zero (Official Video)", "Channel"),
+                "Ghost - Year Zero (Official Video)",
+                "Channel",
+            ),
+        ] {
+            let mut item = record(&key, title, artist, "Line\n");
+            item.duration = Some(350.0);
+            library.put(item).expect("record saves");
+        }
+
+        assert_eq!(
+            library.find_key("Year Zero", "Ghost B.C.", Some(350.0)),
+            None
+        );
+    }
+
+    #[test]
+    fn keeps_a_different_cut_of_the_same_song_apart() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Feraline", "Combichrist");
+        let mut item = record(&key, "Feraline", "Combichrist", "Line\n");
+        item.duration = Some(312.0);
+        library.put(item).expect("record saves");
+
+        assert_eq!(
+            library.find_key(
+                "Combichrist - Feraline (Official Lyric Video)",
+                "Out Of Line Music",
+                Some(400.0)
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_channel_name_variant_needs_the_duration_to_match() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let library = Library::open(temp.path()).expect("library opens");
+        let key = record_key("Year Zero", "Ghost");
+        let mut item = record(&key, "Year Zero", "Ghost", "Line\n");
+        item.duration = Some(350.0);
+        library.put(item).expect("record saves");
+
+        let decorated = "Ghost B.C. - Year Zero (AUDIO)";
+        assert_eq!(library.find_key(decorated, "Ghost", Some(350.2)), Some(key));
+        assert_eq!(library.find_key(decorated, "Ghost", Some(300.0)), None);
+        assert_eq!(library.find_key(decorated, "Ghost", None), None);
     }
 
     #[test]
