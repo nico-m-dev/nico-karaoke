@@ -21,6 +21,8 @@
   "player.library.original_available": "origineel bewaard",
   "player.library.offset": "offset {value}s",
   "player.library.close": "Bibliotheek sluiten",
+  "player.library.new_lyrics": "Nieuwe tekst",
+  "player.library.missing_current": "Nog geen tekst voor dit nummer.",
   "player.fullscreen": "Volledig scherm (F)",
   "player.playpause": "Afspelen / pauze (spatie)",
   "player.unknown_track": "Onbekend nummer",

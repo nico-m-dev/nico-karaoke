@@ -87,12 +87,15 @@ download folder; on Windows, compare the archive with
 | Accent dots | switch the accent colour on the idle screen (remembered) |
 
 Open an item in the **Studio** to correct its text or timing. The Studio never writes without an
-explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch.
+explicit save (`Ctrl`/`Cmd` + `S`); it also has tap mode for timing a song from scratch. When
+the current song has no lyrics yet, choose **New lyrics** in the Library to create them there.
 
 ## Library and Studio
 
 The Library keeps every saved lyric and puts the current song first. Open the Studio to fix a
-line or retime a song; tap mode lets you time a whole song by pressing Space at each line.
+line or retime a song; tap mode lets you time a whole song by pressing Space at each line. A
+song whose lookup found nothing gets a **New lyrics** card at the top, so you can type or paste
+your own text instead.
 
 <p align="center">
   <img src="docs/screenshots/library.png" alt="The library listing saved lyrics with the current song first" width="480">
@@ -129,8 +132,9 @@ Set `NICO_KARAOKE_DATA` to use a different data directory (development and porta
 
 ## If something does not work
 
-- **No lyrics appear:** LRCLIB may not have that song. Open the Studio and use **Fetch**, or
-  check the title and artist in your player.
+- **No lyrics appear:** LRCLIB may not have that song. Choose **New lyrics** in the Library to
+  type or paste your own text, or open the Studio and use **Fetch** after checking the title
+  and artist in your player.
 - **The app does not follow my player:** make sure the player publishes MPRIS on Linux or SMTC
   on Windows. With multiple players, pick one in the top bar.
 - **The lyrics are out of sync:** open the Studio and nudge the line or use tap mode.
@@ -286,6 +290,10 @@ reachable and nothing fades in or out.
 The library opens from the player and lists every saved text. Search filters by title,
 artist, or album. The current track is listed first. Each item shows its source, sync state,
 line count, update date, current badge, and whether an original is kept.
+
+When the current track has no saved text, the header offers **New lyrics** and the list starts
+with a card for that track. Both open an unsaved Studio document bound to the current track;
+saving creates the record.
 
 Open an item to preview its saved text, open it in the Studio, delete it, or search for it
 on YouTube or Spotify. Editing, restoring the original, and timing all live in the Studio.

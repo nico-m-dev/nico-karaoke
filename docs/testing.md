@@ -50,6 +50,18 @@ a public release.
   timed lyrics.
 - Rust parser/serializer tests and the Studio serializer test cover both cases.
 
+## Creating lyrics without a lookup
+
+- Headless Chromium against a stubbed API on 2026-11-14: with a playing track and a `missing`
+  lyrics state, the Library showed **New lyrics** in the header and a card for the current
+  track. Both opened `/editor` as an unsaved document bound to the track; adding a line and
+  saving issued one `POST /api/lyrics` and reported Saved.
+- The same run checked that the header action disappears once text exists, that focus returns
+  to the dialog when a poll removes the card, and that the Dutch header wraps without clipping
+  the close button at 360 px.
+- Still to check on a real desktop (WebKitGTK and WebView2): the same flow against a live MPRIS
+  or SMTC player, and that the player shows the new lyrics after returning.
+
 ## Logs
 
 `nico-karaoke.log` lives in the data directory. At startup, a file of at least 5 MiB is moved

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { currentFirst, matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
+import {
+  currentFirst,
+  matchesLibraryQuery,
+  showNewLyricsItem,
+  spotifySearchUrl,
+  youtubeSearchUrl,
+} from "./library";
 
 const item = {
   title: "Blue Monday",
@@ -20,6 +26,21 @@ describe("matchesLibraryQuery", () => {
 
   it("rejects non-matches", () => {
     expect(matchesLibraryQuery(item, "nothing here")).toBe(false);
+  });
+});
+
+describe("showNewLyricsItem", () => {
+  const track = { title: "Blue Monday", artist: "New Order", album: "" };
+
+  it("offers creation only when a lookup finished without lyrics", () => {
+    expect(showNewLyricsItem(track, { state: "missing" })).toBe(true);
+    expect(showNewLyricsItem(track, { state: "found" })).toBe(false);
+    expect(showNewLyricsItem(track, { state: "loading" })).toBe(false);
+    expect(showNewLyricsItem(track, { state: "error" })).toBe(false);
+  });
+
+  it("does not offer creation without a track", () => {
+    expect(showNewLyricsItem(null, { state: "missing" })).toBe(false);
   });
 });
 

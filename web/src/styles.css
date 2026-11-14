@@ -582,6 +582,7 @@ body[data-state="playing"] .idle {
 .library-head {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
@@ -603,6 +604,7 @@ body[data-state="playing"] .idle {
   display: flex;
   flex: none;
   gap: 0.35rem;
+  margin-left: auto;
 }
 
 .library-head-actions .icon {
@@ -665,6 +667,28 @@ body[data-state="playing"] .idle {
 .library-item.current {
   border-color: rgb(var(--accent-rgb) / 0.5);
   background: var(--accent-soft);
+}
+
+.library-item-new {
+  border-style: dashed;
+  border-color: rgb(var(--accent-rgb) / 0.45);
+  background: var(--accent-soft);
+  color: inherit;
+  text-decoration: none;
+}
+
+.library-item-new:hover,
+.library-item-new:focus-visible {
+  border-color: var(--accent);
+  background: rgb(var(--accent-rgb) / 0.12);
+}
+
+.library-item-action {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
 .library-item-title,

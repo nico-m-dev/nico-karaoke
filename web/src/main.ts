@@ -36,7 +36,13 @@ import idleElectricBlue from "./assets/idle-electricblue.webp";
 import idleLime from "./assets/idle-lime.webp";
 import idleMagenta from "./assets/idle-magenta.webp";
 import idleOrange from "./assets/idle-orange.webp";
-import { currentFirst, matchesLibraryQuery, spotifySearchUrl, youtubeSearchUrl } from "./library";
+import {
+  currentFirst,
+  matchesLibraryQuery,
+  showNewLyricsItem,
+  spotifySearchUrl,
+  youtubeSearchUrl,
+} from "./library";
 
 const artwork: Record<Accent, string> = {
   cyan: idleCyan,
@@ -120,6 +126,7 @@ app.innerHTML = `
           <p class="hint" id="library-count"></p>
         </div>
         <div class="library-head-actions">
+          <button class="ghost primary" id="library-new" type="button" data-i18n="player.library.new_lyrics" hidden></button>
           <button class="ghost icon" id="library-refresh" type="button" data-i18n-title="player.library.refresh" data-i18n-aria-label="player.library.refresh">↻</button>
           <button class="ghost icon" id="library-close" type="button" data-i18n-title="player.library.close" data-i18n-aria-label="player.library.close">✕</button>
         </div>
@@ -159,6 +166,7 @@ const els = {
   libraryCount: query<HTMLElement>("#library-count"),
   librarySearch: query<HTMLInputElement>("#library-search"),
   libraryDetail: query<HTMLElement>("#library-detail"),
+  libraryNew: query<HTMLButtonElement>("#library-new"),
   libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
   libraryClose: query<HTMLButtonElement>("#library-close"),
   offline: query<HTMLElement>("#offline"),
@@ -214,6 +222,8 @@ let libraryRequest = 0;
 let selectedKey: string | null = null;
 let detailItem: LibraryItemResponse | null = null;
 let detailBusy = false;
+/** Track identity of the rendered "no lyrics yet" card, so a poll can detect a change. */
+let libraryCardTrack = "";
 
 function trackKey(track: Track | null): string {
   return track ? `${track.player}|${track.track_id}|${track.title}|${track.artist}` : "";
@@ -620,6 +630,7 @@ function centerLine(index: number, instant = false): void {
 function applyNow(next: Now): void {
   const previous = data;
   data = next;
+  updateLibraryNewAction();
   const track = next.track;
   const now = performance.now();
 
@@ -689,6 +700,7 @@ function applyNow(next: Now): void {
       void loadLibrary();
     }
   }
+  syncLibraryCard();
 
   const nextLyricsKey = lyricsCacheKey(next.lyrics);
   if (nextLyricsKey !== lyricsKey) {
@@ -815,6 +827,26 @@ function showToast(message: string): void {
   }, 4200);
 }
 
+function updateLibraryNewAction(): void {
+  // Only a missing lookup has something to create; with saved text the item detail already
+  // opens the Studio, so a "New lyrics" button would be misleading there.
+  const canCreate = showNewLyricsItem(data.track, data.lyrics);
+  if (!canCreate && !els.library.hidden && document.activeElement === els.libraryNew) {
+    els.libraryClose.focus();
+  }
+  els.libraryNew.hidden = !canCreate;
+  els.libraryNew.disabled = !canCreate;
+}
+
+/** Open an unsaved Studio document bound to the current track. */
+function openNewLyrics(): void {
+  if (detailBusy || !data.track) {
+    return;
+  }
+  // A key for a missing record would 404 in the Studio; the empty document binds to the track.
+  window.location.assign("/editor");
+}
+
 async function openLibrary(): Promise<void> {
   if (detailBusy) {
     return;
@@ -825,6 +857,7 @@ async function openLibrary(): Promise<void> {
   els.librarySearch.value = "";
   els.library.hidden = false;
   els.stage.inert = true;
+  updateLibraryNewAction();
   showLibraryList();
   els.libraryList.scrollTop = 0;
   els.libraryDetail.scrollTop = 0;
@@ -840,6 +873,7 @@ function closeLibrary(): void {
   els.stage.inert = false;
   selectedKey = null;
   detailItem = null;
+  libraryCardTrack = "";
   const opener = libraryOpener;
   libraryOpener = null;
   opener?.focus();
@@ -893,9 +927,13 @@ async function loadLibrary(): Promise<void> {
 
 function renderLibrary(library: LibraryResponse): void {
   showLibraryList();
-  els.libraryCount.textContent = t(language, "player.library.count", {
-    count: library.items.length,
-  });
+  const track = data.track;
+  const currentMissing = showNewLyricsItem(track, data.lyrics) ? trackKey(track) : "";
+  const showCard =
+    track !== null &&
+    currentMissing !== "" &&
+    matchesLibraryQuery(track, els.librarySearch.value.trim().toLocaleLowerCase());
+  libraryCardTrack = currentMissing;
 
   const query = els.librarySearch.value.trim().toLocaleLowerCase();
   const items = currentFirst(library.items.filter((item) => matchesLibraryQuery(item, query)));
@@ -904,7 +942,7 @@ function renderLibrary(library: LibraryResponse): void {
     count: items.length,
   });
 
-  if (items.length === 0) {
+  if (items.length === 0 && !showCard) {
     const empty = document.createElement("p");
     empty.className = "hint library-empty";
     empty.textContent = t(
@@ -915,8 +953,66 @@ function renderLibrary(library: LibraryResponse): void {
     return;
   }
 
-  const nodes = items.map((item) => libraryItem(item));
+  const nodes: HTMLElement[] = items.map((item) => libraryItem(item));
+  if (showCard) {
+    nodes.unshift(libraryNewItem());
+  }
   els.libraryList.replaceChildren(...nodes);
+}
+
+/** The current track has no saved text yet: offer to create one in the Studio. */
+function libraryNewItem(): HTMLAnchorElement {
+  const track = data.track;
+  const card = document.createElement("a");
+  card.className = "library-item library-item-new";
+  card.href = "/editor";
+
+  const title = document.createElement("span");
+  title.className = "library-item-title";
+  title.textContent = track?.title || t(language, "player.unknown_track");
+
+  const artist = document.createElement("span");
+  artist.className = "library-item-artist";
+  artist.textContent = [track?.artist, track?.album].filter(Boolean).join(" · ");
+
+  const meta = document.createElement("span");
+  meta.className = "library-item-meta";
+  meta.textContent = t(language, "player.library.missing_current");
+
+  const action = document.createElement("span");
+  action.className = "library-item-action";
+  action.textContent = t(language, "player.library.new_lyrics");
+
+  card.append(title, artist, meta, action);
+  return card;
+}
+
+/** A poll can finish a lyrics search while the list is open; re-render only when the card changes. */
+function syncLibraryCard(): void {
+  if (els.library.hidden || selectedKey || detailBusy || !libraryData) {
+    return;
+  }
+  const next = showNewLyricsItem(data.track, data.lyrics) ? trackKey(data.track) : "";
+  if (next === libraryCardTrack) {
+    return;
+  }
+
+  // Replacing the list would otherwise drop focus to the document, outside the dialog trap.
+  const active = document.activeElement;
+  const focusedKey =
+    active instanceof HTMLElement && els.libraryList.contains(active)
+      ? (active.dataset.key ?? "")
+      : null;
+  renderLibrary(libraryData);
+  if (focusedKey === null) {
+    return;
+  }
+  const selector = focusedKey ? `.library-item[data-key="${CSS.escape(focusedKey)}"]` : "";
+  const target =
+    (selector ? els.libraryList.querySelector<HTMLElement>(selector) : null) ??
+    els.libraryList.querySelector<HTMLElement>(".library-item") ??
+    els.libraryClose;
+  target.focus();
 }
 
 function libraryItem(item: LibrarySummary): HTMLElement {
@@ -1186,6 +1282,7 @@ function bind(): void {
   document.querySelector<HTMLButtonElement>("#library-idle")?.addEventListener("click", () => {
     void openLibrary();
   });
+  els.libraryNew.addEventListener("click", openNewLyrics);
   els.libraryClose.addEventListener("click", closeLibrary);
   els.librarySearch.addEventListener("input", () => {
     if (libraryData && !selectedKey) {

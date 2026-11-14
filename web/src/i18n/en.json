@@ -21,6 +21,8 @@
   "player.library.original_available": "original kept",
   "player.library.offset": "offset {value}s",
   "player.library.close": "Close the library",
+  "player.library.new_lyrics": "New lyrics",
+  "player.library.missing_current": "No lyrics yet for this track.",
   "player.fullscreen": "Fullscreen (F)",
   "player.playpause": "Play / pause (space)",
   "player.unknown_track": "Unknown track",

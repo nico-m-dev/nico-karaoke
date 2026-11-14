@@ -4,6 +4,13 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Create lyrics when a track's lookup found nothing: the Library now offers **New lyrics** and
+  a card for the current track, opening an unsaved Studio document bound to that track.
+
 ## [1.0.0] - 2026-11-13
 
 First public release of the Rust and Tauri rewrite.

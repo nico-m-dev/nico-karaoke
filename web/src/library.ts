@@ -1,4 +1,4 @@
-import type { LibrarySummary } from "./api";
+import type { LibrarySummary, Lyrics, Track } from "./api";
 
 export function matchesLibraryQuery(
   item: Pick<LibrarySummary, "title" | "artist" | "album">,
@@ -16,6 +16,17 @@ export function matchesLibraryQuery(
 /** Put the currently playing item first; the sort is stable, so the rest keeps its order. */
 export function currentFirst<T extends { current: boolean }>(items: T[]): T[] {
   return [...items].sort((left, right) => Number(right.current) - Number(left.current));
+}
+
+/**
+ * Whether the library should offer to create lyrics for the current track. Only a completed
+ * lookup without a result counts; loading and temporary errors are not "no lyrics yet".
+ */
+export function showNewLyricsItem(
+  track: Pick<Track, "title" | "artist" | "album"> | null,
+  lyrics: Pick<Lyrics, "state">,
+): boolean {
+  return track !== null && lyrics.state === "missing";
 }
 
 export function youtubeSearchUrl(title: string, artist: string): string {
