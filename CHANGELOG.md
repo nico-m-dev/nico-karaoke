@@ -4,7 +4,7 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-11-14
 
 ### Added
 
@@ -63,4 +63,5 @@ First public release of the Rust and Tauri rewrite.
   librsvg at runtime.
 - Only x86_64 Linux and Windows are built. macOS is not released.
 
+[1.1.0]: https://github.com/nico-m-dev/nico-karaoke/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nico-m-dev/nico-karaoke/releases/tag/v1.0.0

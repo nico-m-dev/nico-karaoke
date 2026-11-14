@@ -80,6 +80,20 @@ Each release also includes `SHA256SUMS.txt`. On Linux, run `sha256sum -c SHA256S
 download folder; on Windows, compare the installer with
 `Get-FileHash <installer> -Algorithm SHA256`.
 
+### Updating and uninstalling
+
+- **Updates:** open **Settings → Check for updates**. A release build checks at startup, shows a
+  badge on the gear, and shows a one-time toast when a newer version is available. Installing an
+  update always requires confirmation.
+- **Linux AppImage:** an update replaces the AppImage file. To uninstall, delete the AppImage.
+  The data folder `~/.local/share/nico-karaoke/` remains; delete it to remove saved lyrics and
+  logs.
+- **Windows:** uninstall through **Settings → Apps → Installed apps → Nico Karaoke →
+  Uninstall**. The data folder remains; delete it to remove saved lyrics and logs.
+
+A `.deb`, Arch package, or other package-managed install is not offered yet. Those builds update
+through their package manager, not the in-app updater.
+
 ## How to use
 
 1. Download and extract the app for your platform; see [Download and install](#download-and-install).
