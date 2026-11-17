@@ -13,7 +13,7 @@
   --accent-rgb: 168 230 63;
   --accent-soft: rgb(var(--accent-rgb) / 0.14);
   --danger: #ff8c7a;
-  --line-font: clamp(1.5rem, 3.2vw, 2.85rem);
+  --line-font: clamp(1.5rem, min(3.4vw, 5.6vh), 8rem);
   --line-pad: clamp(1.1rem, 7vw, 8rem);
 }
 
@@ -155,7 +155,7 @@ textarea:focus-visible {
   font-size: var(--line-font);
   font-weight: 600;
   letter-spacing: -0.025em;
-  line-height: 1.22;
+  line-height: 1.35;
   opacity: 0.66;
   overflow-wrap: anywhere;
   text-align: center;
@@ -173,8 +173,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 0;
   color: var(--accent);
-  clip-path: inset(0 calc(100% - var(--p, 0%)) 0 0);
-  overflow: hidden;
+  clip-path: inset(-0.15em calc(100% - var(--p, 0%)) -0.15em 0);
   pointer-events: none;
   white-space: pre-wrap;
 }

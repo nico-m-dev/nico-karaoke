@@ -18,6 +18,13 @@ All notable changes to Nico Karaoke are recorded here. The format follows
   repeating "playing" in its metadata.
 - A track without lyrics no longer gets a duplicate card in the library; the **New lyrics**
   button in the header is the single place to start.
+- Lyric text scales with the window height as well as its width, so large and ultrawide displays
+  no longer cap it at a small size.
+
+### Fixed
+
+- The lyric fill no longer cuts the bottom of descenders such as “y” when a font's line metrics
+  are taller than its line box.
 
 ## [1.1.0] - 2026-11-14
 

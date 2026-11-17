@@ -240,6 +240,15 @@ and 620 px confirmed that the second visual line stays unfilled until the sweep 
 after a resize, and that a past line turns fully green. The clip computation has unit tests in
 `web/src/player.test.ts`.
 
+The lyric size follows both dimensions: `clamp(1.5rem, min(3.4vw, 5.6vh), 8rem)`. Headless
+Chromium measured 24 px at 390×844, 48.96 px at 1440×900, 60.48 px at 1920×1080, and 80.64 px at
+5120×1440; the old `2.85rem` cap kept the last two at 45.6 px.
+
+The fill layer extends 0.15em beyond the line box and no longer uses `overflow: hidden`, so
+descenders such as the tail of “y” keep their colour even when the font's metrics are taller
+than the line box. The line height is now 1.35em, above Segoe UI's 1.33em metrics. Headless
+Chromium at 5120×1440 confirmed the computed clip; a live Windows ultrawide check remains.
+
 The Studio transport sends an explicit `play` or `pause` based on the intended state instead of
 a blind toggle, and shows that state immediately while a poll may still describe the previous
 one. It also queues a single click that arrives while a control request is in flight instead of
