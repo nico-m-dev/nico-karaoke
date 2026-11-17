@@ -1,9 +1,10 @@
 # Nico Karaoke — roadmap
 
-Future work and open decisions. Product behaviour, architecture, and settled decisions live in
-`README.md` and `AGENTS.md`; test evidence lives in `docs/testing.md`.
+Future work and open decisions. Product behaviour and settled decisions live in `README.md` and
+`AGENTS.md`; implementation notes live in `docs/development.md`; test evidence lives in
+`docs/testing.md`.
 
-Updated: 2026-11-14.
+Updated: 2026-11-17.
 
 ## After 1.0.0
 
@@ -44,6 +45,15 @@ Updated: 2026-11-14.
 - A repeatable 60 fps budget check for very long songs and long lines.
 - Community translation workflow: document adding a catalog and registering a language.
 - Optional local-only remote control from a phone, only after an explicit security design.
+
+## Maybe, not decided
+
+These are ideas only; nothing here is planned or promised.
+
+- A read-only second-screen player over the local network, so a TV, tablet, or phone can show the
+  same lyrics as the host. Multiple viewers would connect to the same session. It would need an
+  explicit opt-in, a pairing token, and a strictly read-only API; Chromecast, AirPlay, and cloud
+  receivers are out of scope. Screen mirroring or a cable remains the recommended setup for now.
 
 ## Advanced authoring (later)
 
