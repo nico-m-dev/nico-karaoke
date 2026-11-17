@@ -115,13 +115,14 @@ the current song has no lyrics yet, choose **New lyrics** in the Library to crea
 
 ## Library and Studio
 
-The Library keeps every saved lyric and puts the current song first. Open the Studio to fix a
-line or retime a song; tap mode lets you time a whole song by pressing Space at each line. A
-song whose lookup found nothing gets a **New lyrics** card at the top, so you can type or paste
-your own text instead.
+The Library keeps every saved lyric and puts the current song first, marked **Now playing**.
+Search by title, artist, or album, filter on Synced, Needs timing, or My edits, and sort by
+last update, title, or artist. Open the Studio to fix a line or retime a song; tap mode lets you
+time a whole song by pressing Space at each line. When the current song has no lyrics yet,
+choose **New lyrics** in the header to type or paste your own text.
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="The library listing saved lyrics with the current song first" width="480">
+  <img src="docs/screenshots/library.png" alt="The library with filters and the current song marked Now playing" width="480">
 </p>
 
 <p align="center">

@@ -48,10 +48,20 @@ import idleOrange from "./assets/idle-orange.webp";
 import idleRed from "./assets/idle-red.webp";
 import {
   currentFirst,
+  detectLibraryFilter,
+  detectLibrarySort,
+  isLibraryFilter,
+  isLibrarySort,
+  matchesLibraryFilter,
   matchesLibraryQuery,
+  rememberLibraryFilter,
+  rememberLibrarySort,
   showNewLyricsItem,
+  sortLibrary,
   spotifySearchUrl,
   youtubeSearchUrl,
+  type LibraryFilter,
+  type LibrarySort,
 } from "./library";
 
 const artwork: Record<Accent, string> = {
@@ -131,7 +141,7 @@ app.innerHTML = `
       <header class="library-head">
         <div>
           <h2 id="library-title" data-i18n="player.library"></h2>
-          <p class="hint" id="library-count"></p>
+          <p class="hint" id="library-count" role="status" aria-live="polite"></p>
         </div>
         <div class="library-head-actions">
           <button class="ghost primary" id="library-new" type="button" data-i18n="player.library.new_lyrics" hidden></button>
@@ -139,7 +149,22 @@ app.innerHTML = `
           <button class="ghost icon" id="library-close" type="button" data-i18n-title="player.library.close" data-i18n-aria-label="player.library.close">✕</button>
         </div>
       </header>
-      <input id="library-search" class="library-search" type="search" data-i18n-placeholder="player.library.search_placeholder" data-i18n-aria-label="player.library.search_aria" autocomplete="off">
+      <div class="library-tools" id="library-tools">
+        <input id="library-search" class="library-search" type="search" data-i18n-placeholder="player.library.search_placeholder" data-i18n-aria-label="player.library.search_aria" autocomplete="off">
+        <div class="library-view">
+          <select id="library-filter" data-i18n-aria-label="player.library.filter_aria">
+            <option value="all" data-i18n="player.library.filter.all"></option>
+            <option value="synced" data-i18n="player.library.filter.synced"></option>
+            <option value="unsynced" data-i18n="player.library.filter.unsynced"></option>
+            <option value="edited" data-i18n="player.library.filter.edited"></option>
+          </select>
+          <select id="library-sort" data-i18n-aria-label="player.library.sort_aria">
+            <option value="updated" data-i18n="player.library.sort.updated"></option>
+            <option value="title" data-i18n="player.library.sort.title"></option>
+            <option value="artist" data-i18n="player.library.sort.artist"></option>
+          </select>
+        </div>
+      </div>
       <div class="library-list" id="library-list"></div>
       <section class="library-detail" id="library-detail" hidden></section>
     </aside>
@@ -170,9 +195,12 @@ const els = {
   idleArt: query<HTMLImageElement>("#idle-art"),
   idleHint: query<HTMLElement>("#idle-hint"),
   library: query<HTMLElement>("#library"),
+  libraryTools: query<HTMLElement>("#library-tools"),
   libraryList: query<HTMLElement>("#library-list"),
   libraryCount: query<HTMLElement>("#library-count"),
   librarySearch: query<HTMLInputElement>("#library-search"),
+  libraryFilter: query<HTMLSelectElement>("#library-filter"),
+  librarySort: query<HTMLSelectElement>("#library-sort"),
   libraryDetail: query<HTMLElement>("#library-detail"),
   libraryNew: query<HTMLButtonElement>("#library-new"),
   libraryRefresh: query<HTMLButtonElement>("#library-refresh"),
@@ -233,8 +261,8 @@ let libraryRequest = 0;
 let selectedKey: string | null = null;
 let detailItem: LibraryItemResponse | null = null;
 let detailBusy = false;
-/** Track identity of the rendered "no lyrics yet" card, so a poll can detect a change. */
-let libraryCardTrack = "";
+let libraryFilter: LibraryFilter = detectLibraryFilter();
+let librarySort: LibrarySort = detectLibrarySort();
 
 const updates = createUpdateStore();
 const settings = createSettingsPanel({
@@ -732,7 +760,6 @@ function applyNow(next: Now): void {
       void loadLibrary();
     }
   }
-  syncLibraryCard();
 
   const nextLyricsKey = lyricsCacheKey(next.lyrics);
   if (nextLyricsKey !== lyricsKey) {
@@ -928,14 +955,13 @@ function closeLibrary(): void {
   els.stage.inert = false;
   selectedKey = null;
   detailItem = null;
-  libraryCardTrack = "";
   const opener = libraryOpener;
   libraryOpener = null;
   opener?.focus();
 }
 
 function showLibraryList(): void {
-  els.librarySearch.hidden = false;
+  els.libraryTools.hidden = false;
   els.libraryList.hidden = false;
   els.libraryDetail.hidden = true;
 }
@@ -960,9 +986,7 @@ async function loadLibrary(): Promise<void> {
     }
     libraryData = data;
     if (selectedKey) {
-      els.libraryCount.textContent = t(language, "player.library.count", {
-        count: data.items.length,
-      });
+      els.libraryCount.textContent = libraryCountText(data, filteredLibraryItems(data).length);
     } else {
       renderLibrary(data);
     }
@@ -980,94 +1004,43 @@ async function loadLibrary(): Promise<void> {
   }
 }
 
+function filteredLibraryItems(library: LibraryResponse): LibrarySummary[] {
+  const query = els.librarySearch.value.trim().toLocaleLowerCase();
+  return library.items.filter(
+    (item) => matchesLibraryQuery(item, query) && matchesLibraryFilter(item, libraryFilter),
+  );
+}
+
+function libraryCountText(library: LibraryResponse, visible: number): string {
+  const total = library.items.length;
+  const narrowed = els.librarySearch.value.trim() !== "" || libraryFilter !== "all";
+  return narrowed && total > 0
+    ? t(language, "player.library.count_filtered", { count: visible, total })
+    : t(language, "player.library.count", { count: total });
+}
+
 function renderLibrary(library: LibraryResponse): void {
   showLibraryList();
-  const track = data.track;
-  const currentMissing = showNewLyricsItem(track, data.lyrics) ? trackKey(track) : "";
-  const showCard =
-    track !== null &&
-    currentMissing !== "" &&
-    matchesLibraryQuery(track, els.librarySearch.value.trim().toLocaleLowerCase());
-  libraryCardTrack = currentMissing;
+  const items = currentFirst(sortLibrary(filteredLibraryItems(library), librarySort));
+  els.libraryCount.textContent = libraryCountText(library, items.length);
 
-  const query = els.librarySearch.value.trim().toLocaleLowerCase();
-  const items = currentFirst(library.items.filter((item) => matchesLibraryQuery(item, query)));
-
-  els.libraryCount.textContent = t(language, "player.library.count", {
-    count: items.length,
-  });
-
-  if (items.length === 0 && !showCard) {
+  if (items.length === 0) {
     const empty = document.createElement("p");
     empty.className = "hint library-empty";
     empty.textContent = t(
       language,
-      query && library.items.length > 0 ? "player.library.no_results" : "player.library.empty",
+      library.items.length === 0
+        ? showNewLyricsItem(data.track, data.lyrics)
+          ? "player.library.missing_current"
+          : "player.library.empty"
+        : "player.library.no_results",
     );
     els.libraryList.replaceChildren(empty);
     return;
   }
 
   const nodes: HTMLElement[] = items.map((item) => libraryItem(item));
-  if (showCard) {
-    nodes.unshift(libraryNewItem());
-  }
   els.libraryList.replaceChildren(...nodes);
-}
-
-/** The current track has no saved text yet: offer to create one in the Studio. */
-function libraryNewItem(): HTMLAnchorElement {
-  const track = data.track;
-  const card = document.createElement("a");
-  card.className = "library-item library-item-new";
-  card.href = "/editor";
-
-  const title = document.createElement("span");
-  title.className = "library-item-title";
-  title.textContent = track?.title || t(language, "player.unknown_track");
-
-  const artist = document.createElement("span");
-  artist.className = "library-item-artist";
-  artist.textContent = [track?.artist, track?.album].filter(Boolean).join(" · ");
-
-  const meta = document.createElement("span");
-  meta.className = "library-item-meta";
-  meta.textContent = t(language, "player.library.missing_current");
-
-  const action = document.createElement("span");
-  action.className = "library-item-action";
-  action.textContent = t(language, "player.library.new_lyrics");
-
-  card.append(title, artist, meta, action);
-  return card;
-}
-
-/** A poll can finish a lyrics search while the list is open; re-render only when the card changes. */
-function syncLibraryCard(): void {
-  if (els.library.hidden || selectedKey || detailBusy || !libraryData) {
-    return;
-  }
-  const next = showNewLyricsItem(data.track, data.lyrics) ? trackKey(data.track) : "";
-  if (next === libraryCardTrack) {
-    return;
-  }
-
-  // Replacing the list would otherwise drop focus to the document, outside the dialog trap.
-  const active = document.activeElement;
-  const focusedKey =
-    active instanceof HTMLElement && els.libraryList.contains(active)
-      ? (active.dataset.key ?? "")
-      : null;
-  renderLibrary(libraryData);
-  if (focusedKey === null) {
-    return;
-  }
-  const selector = focusedKey ? `.library-item[data-key="${CSS.escape(focusedKey)}"]` : "";
-  const target =
-    (selector ? els.libraryList.querySelector<HTMLElement>(selector) : null) ??
-    els.libraryList.querySelector<HTMLElement>(".library-item") ??
-    els.libraryClose;
-  target.focus();
 }
 
 function libraryItem(item: LibrarySummary): HTMLElement {
@@ -1081,6 +1054,16 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   card.addEventListener("click", () => {
     void openDetail(item.key);
   });
+
+  if (item.current) {
+    const badge = document.createElement("span");
+    badge.className = "library-item-badge";
+    const dot = document.createElement("span");
+    dot.className = "library-item-badge-dot";
+    dot.setAttribute("aria-hidden", "true");
+    badge.append(dot, t(language, "player.library.now_playing"));
+    card.append(badge);
+  }
 
   const title = document.createElement("span");
   title.className = "library-item-title";
@@ -1101,9 +1084,6 @@ function libraryItem(item: LibrarySummary): HTMLElement {
   if (item.has_original) {
     parts.push(t(language, "player.library.original_available"));
   }
-  if (item.current) {
-    parts.unshift(t(language, "player.library.current"));
-  }
   meta.textContent = parts.filter(Boolean).join(" · ");
 
   card.append(title, artist, meta);
@@ -1116,7 +1096,7 @@ async function openDetail(key: string, focusTitle = true): Promise<void> {
   }
   selectedKey = key;
   detailItem = null;
-  els.librarySearch.hidden = true;
+  els.libraryTools.hidden = true;
   els.libraryList.hidden = true;
   els.libraryDetail.hidden = false;
   els.libraryDetail.replaceChildren(hintNode(t(language, "player.library.loading")));
@@ -1142,7 +1122,7 @@ function renderDetail(focusTitle = true): void {
   const item = detailItem;
   const lyrics = item.lyrics;
   els.libraryDetail.replaceChildren();
-  els.librarySearch.hidden = true;
+  els.libraryTools.hidden = true;
   els.libraryList.hidden = true;
   els.libraryDetail.hidden = false;
 
@@ -1166,7 +1146,7 @@ function renderDetail(focusTitle = true): void {
   const meta = document.createElement("p");
   meta.className = "detail-meta";
   meta.textContent = [
-    item.current ? t(language, "player.library.current") : "",
+    item.current ? t(language, "player.library.now_playing") : "",
     t(language, sourceLabelKey(lyrics.source ?? "manual")),
     lyrics.synced ? t(language, "library.synced") : t(language, "library.plain"),
     lineCountLabel(lyrics.lines.length),
@@ -1313,6 +1293,9 @@ function formatDate(seconds: number): string {
 }
 
 function bind(): void {
+  els.libraryFilter.value = libraryFilter;
+  els.librarySort.value = librarySort;
+
   document.querySelectorAll<HTMLButtonElement>("[data-language]").forEach((button) => {
     button.addEventListener("click", () => {
       const next = button.dataset.language;
@@ -1339,6 +1322,24 @@ function bind(): void {
   els.librarySearch.addEventListener("input", () => {
     if (libraryData && !selectedKey) {
       renderLibrary(libraryData);
+    }
+  });
+  els.libraryFilter.addEventListener("change", () => {
+    if (isLibraryFilter(els.libraryFilter.value)) {
+      libraryFilter = els.libraryFilter.value;
+      rememberLibraryFilter(libraryFilter);
+      if (libraryData && !selectedKey) {
+        renderLibrary(libraryData);
+      }
+    }
+  });
+  els.librarySort.addEventListener("change", () => {
+    if (isLibrarySort(els.librarySort.value)) {
+      librarySort = els.librarySort.value;
+      rememberLibrarySort(librarySort);
+      if (libraryData && !selectedKey) {
+        renderLibrary(libraryData);
+      }
     }
   });
   els.libraryRefresh.addEventListener("click", () => {

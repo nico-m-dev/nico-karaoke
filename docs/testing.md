@@ -78,11 +78,26 @@ a public release.
   lyrics state, the Library showed **New lyrics** in the header and a card for the current
   track. Both opened `/editor` as an unsaved document bound to the track; adding a line and
   saving issued one `POST /api/lyrics` and reported Saved.
-- The same run checked that the header action disappears once text exists, that focus returns
-  to the dialog when a poll removes the card, and that the Dutch header wraps without clipping
-  the close button at 360 px.
+- On 2026-11-17 the duplicate current-track card was removed. With a missing lookup, **New
+  lyrics** in the header is the only action; an empty library shows “No lyrics yet for this
+  track.” instead of a second card.
+- The same run checked that the header action disappears once text exists and that the Dutch
+  header wraps without clipping the close button at 360 px.
 - Still to check on a real desktop (WebKitGTK and WebView2): the same flow against a live MPRIS
   or SMTC player, and that the player shows the new lyrics after returning.
+
+## Library view
+
+- Headless Chromium against a stubbed API on 2026-11-17: five fake records; the current song
+  carried a **Now playing** badge and extra space before the rest. “Needs timing” showed two
+  of five, title sort kept the current song first and ordered the rest alphabetically, and both
+  choices survived a reload. The same checks passed in Dutch at 390×844 without overflow.
+- A filtered count stays visible after opening a detail and refreshing it, and an empty library
+  keeps the plain total instead of “0 of 0”. The count is a polite live region.
+- `library.test.ts` covers the filter meanings, case-insensitive title and artist sorts, the
+  current-first rule, storage persistence, and storage failures.
+- Still to check with a real library: a very long list and a current song that falls outside
+  the active filter.
 
 ## In-app updates
 

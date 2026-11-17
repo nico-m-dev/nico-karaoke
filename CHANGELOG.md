@@ -9,6 +9,15 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 ### Added
 
 - A red accent palette with matching reel-to-reel artwork on the idle screen.
+- Library filters for Synced, Needs timing, and My edits, plus sorting by last update, title,
+  or artist. Both choices are remembered on this device.
+
+### Changed
+
+- The library marks the current song with a **Now playing** badge and extra spacing instead of
+  repeating "playing" in its metadata.
+- A track without lyrics no longer gets a duplicate card in the library; the **New lyrics**
+  button in the header is the single place to start.
 
 ## [1.1.0] - 2026-11-14
 

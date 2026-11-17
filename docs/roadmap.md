@@ -37,8 +37,6 @@ Updated: 2026-11-14.
 
 ## Product follow-ups
 
-- Library sort options beyond the current order: the current track first, then most recently
-  updated.
 - Import/export of local `.lrc` files and LRCGET libraries.
 - Show the app version in the UI.
 - An optional "open logs" action for support.
