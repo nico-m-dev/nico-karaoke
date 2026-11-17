@@ -42,6 +42,11 @@ html[data-accent="orange"] {
   --accent-rgb: 247 169 39;
 }
 
+html[data-accent="red"] {
+  --accent: #ff5c5c;
+  --accent-rgb: 255 92 92;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -628,6 +633,10 @@ body[data-state="playing"] .idle {
 
 .accent-swatch[data-accent="orange"] {
   --swatch: #f7a927;
+}
+
+.accent-swatch[data-accent="red"] {
+  --swatch: #ff5c5c;
 }
 
 .settings-about {

@@ -11,7 +11,7 @@ describe("detectAccent", () => {
   });
 
   it("accepts every supported accent", () => {
-    for (const accent of ["cyan", "electric-blue", "lime", "magenta", "orange"] as const) {
+    for (const accent of ["cyan", "electric-blue", "lime", "magenta", "orange", "red"] as const) {
       expect(detectAccent(storage(accent))).toBe(accent);
     }
   });

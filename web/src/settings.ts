@@ -8,6 +8,7 @@ const ACCENT_MESSAGES: Record<Accent, MessageKey> = {
   lime: "accent.lime",
   magenta: "accent.magenta",
   orange: "accent.orange",
+  red: "accent.red",
 };
 
 export type SettingsPanel = {

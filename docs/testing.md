@@ -137,7 +137,7 @@ the session AT-SPI bus is stale: the socket exists but has no live listener. Res
 
 ## Idle art and accent colours
 
-- Five accent palettes live as CSS variables on `<html data-accent>`, so the player, lyrics
+- Six accent palettes live as CSS variables on `<html data-accent>`, so the player, lyrics
   highlight, controls, and Studio use one choice. The choice persists as `nico.accent`; lime
   is the default.
 - Every accent colour meets AA (4.5:1) for normal text against the page background and the
@@ -166,6 +166,9 @@ the session AT-SPI bus is stale: the socket exists but has no live listener. Res
   (Tauri) and Windows WebView2 remains.
 - The stored accent is applied by the entry module. The CSP forbids an inline pre-paint script,
   so a first load can briefly show the lime default before the module runs.
+- Red was added on 2026-11-17 with `#ff5c5c`; it reaches 6.5:1 against the page background and
+  5.0:1 against the accent-tinted panel. Its reel-to-reel artwork is trimmed, fitted to 1280 px,
+  and centred like the other five idle images.
 
 ## Performance
 

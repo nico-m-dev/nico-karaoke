@@ -1,6 +1,13 @@
-export type Accent = "cyan" | "electric-blue" | "lime" | "magenta" | "orange";
+export type Accent = "cyan" | "electric-blue" | "lime" | "magenta" | "orange" | "red";
 
-export const ACCENTS: readonly Accent[] = ["cyan", "electric-blue", "lime", "magenta", "orange"];
+export const ACCENTS: readonly Accent[] = [
+  "cyan",
+  "electric-blue",
+  "lime",
+  "magenta",
+  "orange",
+  "red",
+];
 
 export const DEFAULT_ACCENT: Accent = "lime";
 

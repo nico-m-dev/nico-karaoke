@@ -4,6 +4,12 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A red accent palette with matching reel-to-reel artwork on the idle screen.
+
 ## [1.1.0] - 2026-11-14
 
 ### Added

@@ -45,6 +45,7 @@ import idleElectricBlue from "./assets/idle-electricblue.webp";
 import idleLime from "./assets/idle-lime.webp";
 import idleMagenta from "./assets/idle-magenta.webp";
 import idleOrange from "./assets/idle-orange.webp";
+import idleRed from "./assets/idle-red.webp";
 import {
   currentFirst,
   matchesLibraryQuery,
@@ -59,6 +60,7 @@ const artwork: Record<Accent, string> = {
   lime: idleLime,
   magenta: idleMagenta,
   orange: idleOrange,
+  red: idleRed,
 };
 
 let accent: Accent = detectAccent();
