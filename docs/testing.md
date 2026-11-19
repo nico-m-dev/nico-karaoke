@@ -274,8 +274,8 @@ refreshed on 2026-11-14 for the Settings panel.
 
 ## Release build
 
-This section records the 1.0.0 portable release. From the first updater-enabled release the
-artifacts are an AppImage and an NSIS installer, built and signed by the release workflow.
+This section records release builds. From the first updater-enabled release the artifacts are an
+AppImage and an NSIS installer, built and signed by the release workflow.
 
 - On 2026-11-13 the 1.0.0 desktop binary was built with
   `cargo build --release --locked -p nico-karaoke-desktop` after `npm run build --prefix web`.
@@ -299,6 +299,11 @@ artifacts are an AppImage and an NSIS installer, built and signed by the release
   An anonymous download from the public release URL returned the same Linux checksum
   (`08a9359d…`), and the Windows archive checksum is `b0e2fb43…`. The published binaries come
   from the same source as the accepted rc.2 build.
+- `v1.2.0` built on 2026-11-19. CI and the release workflow passed; the Linux job spent about
+  27 minutes in the apt dependency step, then finished the AppImage build normally. The draft
+  contained the AppImage, NSIS installer, both signatures, `latest.json`, and `SHA256SUMS.txt`,
+  and was published. An anonymous request to `releases/latest/download/latest.json` returned
+  version 1.2.0. The in-app update on the owner's Windows machine is still to be recorded.
 
 ## Manual player matrix
 
