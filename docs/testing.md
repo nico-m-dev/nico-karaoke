@@ -303,7 +303,10 @@ AppImage and an NSIS installer, built and signed by the release workflow.
   27 minutes in the apt dependency step, then finished the AppImage build normally. The draft
   contained the AppImage, NSIS installer, both signatures, `latest.json`, and `SHA256SUMS.txt`,
   and was published. An anonymous request to `releases/latest/download/latest.json` returned
-  version 1.2.0. The in-app update on the owner's Windows machine is still to be recorded.
+  version 1.2.0.
+- The owner confirmed the first end-to-end in-app update on Windows: the installed 1.1.0 found
+  and installed 1.2.0, and the updated build ran smoothly. The new large-display lyric sizing
+  and the library changes were accepted in that build.
 
 ## Manual player matrix
 
