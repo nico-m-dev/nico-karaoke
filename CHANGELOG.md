@@ -4,6 +4,23 @@ All notable changes to Nico Karaoke are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-11-22
+
+### Security
+
+- Updated `time`, `url`, and the `plist`/`quick-xml` dependency chain to patched
+  releases after a `cargo audit` run.
+- Added a dependency audit job to CI, including a weekly scheduled run.
+- Documented the remaining upstream-blocked `zip` and `glib` advisories in
+  `.cargo/audit.toml`; they cannot be fixed until Tauri/GTK updates.
+
+### Changed
+
+- Raised the minimum supported Rust version to 1.88, required by the patched
+  `time` and `plist` releases.
+- Collapsed nested conditionals flagged by current Clippy. No functional
+  change.
+
 ## [1.2.0] - 2026-11-19
 
 ### Added

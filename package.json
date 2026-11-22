@@ -1,7 +1,7 @@
 {
   "name": "nico-karaoke",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Local karaoke player and lyric studio",
   "scripts": {
     "app": "npm run build --prefix web && cargo run -p nico-karaoke-desktop",
