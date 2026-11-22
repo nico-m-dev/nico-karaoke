@@ -1,0 +1,33 @@
+[advisories]
+# Known advisories in transitive dependencies that cannot be fixed without an
+# upstream Tauri/gtk/updater release. New advisories still fail the audit.
+# Review this list when Tauri, gtk or tauri-plugin-updater moves.
+#
+# Reviewed: 2026-11-22
+
+ignore = [
+  # glib 0.18 is unsound. gtk 0.18.2 (via Tauri/tao/wry/muda) requires ^0.18,
+  # so glib 0.20 cannot be selected until the Tauri/gtk stack updates.
+  "RUSTSEC-2024-0429",
+
+  # zip 4 is pinned by tauri-plugin-updater 2.12 (requires zip ^4); updater
+  # 2.13 still does not move to zip 9. Upstream fix is required.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+  "RUSTSEC-2026-0429",
+  "RUSTSEC-2026-0545",
+  "RUSTSEC-2026-0548",
+
+  # Unmaintained transitive crates; no fixed upgrade is available.
+  "RUSTSEC-2026-0543", # chrono
+  "RUSTSEC-2024-0370", # proc-macro-error
+  "RUSTSEC-2025-0075", # unic-char-range
+  "RUSTSEC-2025-0080", # unic-common
+  "RUSTSEC-2025-0081", # unic-char-property
+  "RUSTSEC-2025-0098", # unic-ucd-version
+  "RUSTSEC-2025-0100", # unic-ucd-ident
+  "RUSTSEC-2026-0370", # zvariant
+  "RUSTSEC-2026-0371", # zbus_names
+  "RUSTSEC-2026-0372", # zvariant_derive
+]
