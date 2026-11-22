@@ -419,10 +419,8 @@ impl Library {
         let payload = serde_json::to_string_pretty(&shaped)? + "\n";
         write_atomic(&path, &payload)?;
 
-        if let Some(old_path) = old_path {
-            if old_path != path {
-                remove_pair(&old_path)?;
-            }
+        if let Some(old_path) = old_path.filter(|old_path| old_path != &path) {
+            remove_pair(&old_path)?;
         }
 
         state.records.insert(key.clone(), shaped.clone());

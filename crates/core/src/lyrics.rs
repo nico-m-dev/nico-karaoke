@@ -110,10 +110,11 @@ pub fn parse_lrc(text: &str) -> LrcDocument {
                 .get(1)
                 .is_some_and(|kind| kind.as_str().eq_ignore_ascii_case("offset"))
             {
-                if let Some(value) = captures.get(2) {
-                    if let Ok(milliseconds) = value.as_str().trim().parse::<i64>() {
-                        offset = milliseconds as f64 / 1000.0;
-                    }
+                if let Some(milliseconds) = captures
+                    .get(2)
+                    .and_then(|value| value.as_str().trim().parse::<i64>().ok())
+                {
+                    offset = milliseconds as f64 / 1000.0;
                 }
             } else {
                 metadata.push(line.to_owned());

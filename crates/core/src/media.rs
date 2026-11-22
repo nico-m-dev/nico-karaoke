@@ -206,11 +206,10 @@ impl MediaTracker {
         if !keep_previous {
             let chosen = self.pick().cloned();
             if self.preferred.is_none() {
-                if let Some(snapshot) = &chosen {
-                    if snapshot.playing {
-                        self.preferred = Some(snapshot.player.clone());
-                    }
-                }
+                self.preferred = chosen
+                    .as_ref()
+                    .filter(|snapshot| snapshot.playing)
+                    .map(|snapshot| snapshot.player.clone());
             }
             self.chosen = chosen.as_ref().map(|snapshot| snapshot.player.clone());
             self.snapshot = chosen.filter(|snapshot| !snapshot.title.is_empty());
@@ -230,14 +229,12 @@ impl MediaTracker {
     }
 
     fn pick(&self) -> Option<&PlayerSnapshot> {
-        if let Some(preferred) = &self.preferred {
-            if let Some(found) = self
-                .snapshots
+        if let Some(found) = self.preferred.as_ref().and_then(|preferred| {
+            self.snapshots
                 .iter()
                 .find(|snapshot| snapshot.player == *preferred)
-            {
-                return Some(found);
-            }
+        }) {
+            return Some(found);
         }
 
         self.snapshots

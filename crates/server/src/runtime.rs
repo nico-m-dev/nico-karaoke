@@ -52,15 +52,15 @@ pub fn web_dir_with(resource: Option<PathBuf>) -> PathBuf {
         candidates.push(resource);
     }
     candidates.push(PathBuf::from("web/dist"));
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(directory) = exe.parent() {
-            // A package can keep the assets next to the binary, under /usr/share, or under
-            // /usr/lib; all three are checked so the same binary works from any working
-            // directory.
-            candidates.push(directory.join("web"));
-            candidates.push(directory.join("../share/nico-karaoke/web"));
-            candidates.push(directory.join("../lib/nico-karaoke/web"));
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(directory) = exe.parent()
+    {
+        // A package can keep the assets next to the binary, under /usr/share, or under
+        // /usr/lib; all three are checked so the same binary works from any working
+        // directory.
+        candidates.push(directory.join("web"));
+        candidates.push(directory.join("../share/nico-karaoke/web"));
+        candidates.push(directory.join("../lib/nico-karaoke/web"));
     }
 
     first_ready(candidates).unwrap_or_else(|| PathBuf::from("web/dist"))

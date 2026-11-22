@@ -118,10 +118,10 @@ pub async fn create_library(
 ) -> Result<(StatusCode, Json<LibraryItemResponse>), ApiError> {
     validate_text(&body.text)?;
     let source = parse_source(body.source.as_deref())?;
-    if let Some(duration) = body.duration {
-        if !duration.is_finite() || duration <= 0.0 {
-            return Err(api_error(StatusCode::BAD_REQUEST, "invalid_duration"));
-        }
+    if let Some(duration) = body.duration
+        && (!duration.is_finite() || duration <= 0.0)
+    {
+        return Err(api_error(StatusCode::BAD_REQUEST, "invalid_duration"));
     }
 
     let record = state
@@ -373,23 +373,21 @@ pub async fn fetch_lyrics(
     let current = state.watcher.state();
     let snapshot = current.media.snapshot.clone();
 
-    if let Some(expected) = body.track_id.as_deref() {
-        if !expected.is_empty()
-            && snapshot
-                .as_ref()
-                .is_none_or(|snapshot| snapshot.track_id != expected)
-        {
-            return Err(api_error(StatusCode::CONFLICT, "track_changed"));
-        }
+    if let Some(expected) = body.track_id.as_deref()
+        && !expected.is_empty()
+        && snapshot
+            .as_ref()
+            .is_none_or(|snapshot| snapshot.track_id != expected)
+    {
+        return Err(api_error(StatusCode::CONFLICT, "track_changed"));
     }
-    if let Some(expected) = body.signature.as_deref() {
-        if !expected.is_empty()
-            && snapshot
-                .as_ref()
-                .is_none_or(|snapshot| snapshot.signature() != expected)
-        {
-            return Err(api_error(StatusCode::CONFLICT, "track_changed"));
-        }
+    if let Some(expected) = body.signature.as_deref()
+        && !expected.is_empty()
+        && snapshot
+            .as_ref()
+            .is_none_or(|snapshot| snapshot.signature() != expected)
+    {
+        return Err(api_error(StatusCode::CONFLICT, "track_changed"));
     }
 
     let item = body
@@ -594,12 +592,11 @@ fn allowed_host(config: &AppConfig, host: &str) -> bool {
 
 fn host_name(host: &str) -> String {
     let host = host.trim();
-    if let Some(rest) = host.strip_prefix('[') {
-        if let Some((inside, after)) = rest.split_once(']') {
-            if after.is_empty() || after.starts_with(':') {
-                return inside.to_ascii_lowercase();
-            }
-        }
+    if let Some(rest) = host.strip_prefix('[')
+        && let Some((inside, after)) = rest.split_once(']')
+        && (after.is_empty() || after.starts_with(':'))
+    {
+        return inside.to_ascii_lowercase();
     }
     host.rsplit_once(':')
         .map(|(name, _)| name)

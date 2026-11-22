@@ -253,14 +253,13 @@ impl Watcher {
                 .pinned_match
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(pin) = pinned.as_ref() {
-                if pin.title == title
-                    && pin.artist == artist
-                    && pin.duration == duration
-                    && self.library.contains_key(&pin.key)
-                {
-                    return pin.key.clone();
-                }
+            if let Some(pin) = pinned.as_ref()
+                && pin.title == title
+                && pin.artist == artist
+                && pin.duration == duration
+                && self.library.contains_key(&pin.key)
+            {
+                return pin.key.clone();
             }
         }
 
@@ -269,14 +268,13 @@ impl Watcher {
                 .match_cache
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(cache) = cache.as_ref() {
-                if cache.revision == revision
-                    && cache.title == title
-                    && cache.artist == artist
-                    && cache.duration == duration
-                {
-                    return cache.key.clone();
-                }
+            if let Some(cache) = cache.as_ref()
+                && cache.revision == revision
+                && cache.title == title
+                && cache.artist == artist
+                && cache.duration == duration
+            {
+                return cache.key.clone();
             }
         }
 
@@ -522,15 +520,15 @@ impl Watcher {
             }
             if was_current {
                 let state = self.state();
-                if state.media.generation == generation {
-                    if let Some(snapshot) = state.media.snapshot.as_ref() {
-                        self.show_current_or_missing(
-                            state.media.generation,
-                            &snapshot.title,
-                            &snapshot.artist,
-                            snapshot.length,
-                        );
-                    }
+                if state.media.generation == generation
+                    && let Some(snapshot) = state.media.snapshot.as_ref()
+                {
+                    self.show_current_or_missing(
+                        state.media.generation,
+                        &snapshot.title,
+                        &snapshot.artist,
+                        snapshot.length,
+                    );
                 }
             }
         }
